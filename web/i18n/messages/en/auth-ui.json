@@ -17,6 +17,7 @@
   "createAccount": "Create Account",
   "loginDesc": "Log in to access your knowledge base and private repositories",
   "registerDesc": "Sign up to start using OpenDeepWiki",
+  "account": "Account or Email",
   "email": "Email Address",
   "emailPlaceholder": "name@example.com",
   "password": "Password",

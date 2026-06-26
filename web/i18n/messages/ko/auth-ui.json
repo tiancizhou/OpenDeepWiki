@@ -17,6 +17,7 @@
   "createAccount": "계정 만들기",
   "loginDesc": "로그인하여 지식 기반 및 비공개 저장소에 액세스",
   "registerDesc": "등록하여 OpenDeepWiki 사용 시작",
+  "account": "계정 또는 이메일",
   "email": "이메일",
   "emailPlaceholder": "name@example.com",
   "password": "비밀번호",

@@ -17,6 +17,7 @@
   "createAccount": "アカウント作成",
   "loginDesc": "ログインして知識ベースとプライベートリポジトリにアクセス",
   "registerDesc": "登録してOpenDeepWikiの使用を開始",
+  "account": "アカウントまたはメール",
   "email": "メールアドレス",
   "emailPlaceholder": "name@example.com",
   "password": "パスワード",

@@ -13,8 +13,8 @@ import { useTranslations } from "@/hooks/use-translations";
 type AuthMode = "login" | "register";
 
 const defaultSeedAdmin = {
-  email: "admin@routin.ai",
-  password: "Admin@123",
+  email: "admin",
+  password: "Zt@123456",
 };
 
 export default function AuthPage() {
@@ -199,11 +199,11 @@ export default function AuthPage() {
               <form onSubmit={handleLogin} className="space-y-4">
                 <div className="space-y-2">
                   <label htmlFor="email" className="text-sm font-medium">
-                    {t("authUi.email")}
+                    {t("authUi.account")}
                   </label>
                   <Input
                     id="email"
-                    type="email"
+                    type="text"
                     placeholder={defaultSeedAdmin.email}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}

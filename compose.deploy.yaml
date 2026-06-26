@@ -1,0 +1,103 @@
+services:
+  opendeepwiki:
+    image: ${REGISTRY:-192.168.180.146:8082}/${IMAGE_NAMESPACE:-open-deepwiki}/opendeepwiki:${IMAGE_TAG:-test}
+    pull_policy: always
+    restart: unless-stopped
+    user: "0:0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - URLS=http://+:8080
+
+      # Database
+      - Database__Type=postgresql
+      - ConnectionStrings__Default=Host=postgres;Port=5432;Database=${POSTGRES_DB:-opendeepwiki};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-opendeepwiki123}
+
+      # Security
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-OpenDeepWiki-Default-Secret-Key-Please-Change-In-Production-Environment-2024}
+
+      # Storage
+      - REPOSITORIES_DIRECTORY=/data
+
+      # AI defaults
+      - CHAT_API_KEY=${CHAT_API_KEY:-}
+      - CHAT_MODEL=${CHAT_MODEL:-deepseek-v4-pro}
+      - ENDPOINT=${ENDPOINT:-http://192.168.185.140:3000/v1}
+      - CHAT_REQUEST_TYPE=${CHAT_REQUEST_TYPE:-OpenAI}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-http://192.168.185.140:3000/v1}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+
+      # Graphify artifact generation
+      - GRAPHIFY_BACKEND=${GRAPHIFY_BACKEND:-}
+      - GRAPHIFY_MODEL=${GRAPHIFY_MODEL:-}
+      - GRAPHIFY_OUTPUT_ROOT=/data/graphify-artifacts
+      - GRAPHIFY_OPENAI_BASE_URL=${GRAPHIFY_OPENAI_BASE_URL:-}
+      - GRAPHIFY_OPENAI_API_KEY=${GRAPHIFY_OPENAI_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+
+      # Wiki generator
+      - WIKI_CATALOG_MODEL=${WIKI_CATALOG_MODEL:-deepseek-v4-pro}
+      - WIKI_CATALOG_ENDPOINT=${WIKI_CATALOG_ENDPOINT:-http://192.168.185.140:3000/v1}
+      - WIKI_CATALOG_API_KEY=${WIKI_CATALOG_API_KEY:-}
+      - WIKI_CATALOG_REQUEST_TYPE=${WIKI_CATALOG_REQUEST_TYPE:-OpenAI}
+      - WIKI_CONTENT_MODEL=${WIKI_CONTENT_MODEL:-deepseek-v4-pro}
+      - WIKI_CONTENT_ENDPOINT=${WIKI_CONTENT_ENDPOINT:-http://192.168.185.140:3000/v1}
+      - WIKI_CONTENT_API_KEY=${WIKI_CONTENT_API_KEY:-}
+      - WIKI_CONTENT_REQUEST_TYPE=${WIKI_CONTENT_REQUEST_TYPE:-OpenAI}
+      - WIKI_TRANSLATION_MODEL=${WIKI_TRANSLATION_MODEL:-}
+      - WIKI_TRANSLATION_ENDPOINT=${WIKI_TRANSLATION_ENDPOINT:-}
+      - WIKI_TRANSLATION_API_KEY=${WIKI_TRANSLATION_API_KEY:-}
+      - WIKI_TRANSLATION_REQUEST_TYPE=${WIKI_TRANSLATION_REQUEST_TYPE:-}
+      - WIKI_PARALLEL_COUNT=${WIKI_PARALLEL_COUNT:-5}
+      - WIKI_LANGUAGES=${WIKI_LANGUAGES:-en,zh}
+    volumes:
+      - opendeepwiki-data:/data
+
+  web:
+    image: ${REGISTRY:-192.168.180.146:8082}/${IMAGE_NAMESPACE:-open-deepwiki}/opendeepwiki-web:${IMAGE_TAG:-test}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      opendeepwiki:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - API_PROXY_URL=http://opendeepwiki:8080
+
+  postgres:
+    image: ${REGISTRY:-192.168.180.146:8082}/${IMAGE_NAMESPACE:-open-deepwiki}/postgres:16-alpine
+    pull_policy: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-opendeepwiki}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-opendeepwiki}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-opendeepwiki123}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  opendeepwiki-data:
+  postgres-data:

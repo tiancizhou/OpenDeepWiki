@@ -8,10 +8,9 @@ namespace OpenDeepWiki.Models.Auth;
 public class LoginRequest
 {
     /// <summary>
-    /// 邮箱
+    /// 账号或邮箱
     /// </summary>
-    [Required(ErrorMessage = "邮箱不能为空")]
-    [EmailAddress(ErrorMessage = "邮箱格式不正确")]
+    [Required(ErrorMessage = "账号不能为空")]
     public string Email { get; set; } = string.Empty;
 
     /// <summary>

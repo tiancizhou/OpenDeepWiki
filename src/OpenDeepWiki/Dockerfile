@@ -1,8 +1,18 @@
 ﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential python3-dev \
-        libkrb5-3 curl python3 python3-pip \
-    && pip3 install --break-system-packages --no-cache-dir "graphifyy[openai,gemini,kimi,ollama]" anthropic \
+RUN set -eux; \
+    rm -rf /var/lib/apt/lists/*; \
+    for attempt in 1 2 3; do \
+        if apt-get update -o Acquire::Retries=5 && \
+           apt-get install -y --no-install-recommends --fix-missing -o Acquire::Retries=5 \
+               build-essential python3-dev \
+               libkrb5-3 curl python3 python3-pip; then \
+            break; \
+        fi; \
+        if [ "$attempt" = "3" ]; then exit 1; fi; \
+        rm -rf /var/lib/apt/lists/*; \
+        sleep 5; \
+    done; \
+    pip3 install --break-system-packages --no-cache-dir "graphifyy[openai,gemini,kimi,ollama]" anthropic \
     && rm -rf /var/lib/apt/lists/*
 USER $APP_UID
 WORKDIR /app

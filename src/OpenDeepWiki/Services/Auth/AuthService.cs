@@ -25,7 +25,9 @@ public class AuthService : IAuthService
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email && !u.IsDeleted);
+            .FirstOrDefaultAsync(u =>
+                (u.Email == request.Email || u.Name == request.Email) &&
+                !u.IsDeleted);
 
         if (user == null)
         {
