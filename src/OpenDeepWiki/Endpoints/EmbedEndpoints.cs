@@ -179,14 +179,12 @@ public static class EmbedEndpoints
         sb.AppendLine(sseEvent.Type);
         sb.Append("data: ");
 
-        if (sseEvent.Data is string strData)
+        var eventPayload = new
         {
-            sb.AppendLine(strData);
-        }
-        else
-        {
-            sb.AppendLine(JsonSerializer.Serialize(sseEvent.Data, JsonOptions));
-        }
+            type = sseEvent.Type,
+            data = sseEvent.Data
+        };
+        sb.AppendLine(JsonSerializer.Serialize(eventPayload, JsonOptions));
 
         sb.AppendLine(); // SSE事件之间需要空行分隔
         return sb.ToString();

@@ -25,7 +25,6 @@ public class ChatApp : AggregateRoot<Guid>
     /// <summary>
     /// 应用描述
     /// </summary>
-    [StringLength(500)]
     public string? Description { get; set; }
 
     /// <summary>
@@ -37,7 +36,6 @@ public class ChatApp : AggregateRoot<Guid>
     /// <summary>
     /// 应用图标URL
     /// </summary>
-    [StringLength(500)]
     public string? IconUrl { get; set; }
 
     /// <summary>
@@ -102,13 +100,11 @@ public class ChatApp : AggregateRoot<Guid>
     /// <summary>
     /// API密钥
     /// </summary>
-    [StringLength(500)]
     public string? ApiKey { get; set; }
 
     /// <summary>
     /// API基础URL
     /// </summary>
-    [StringLength(500)]
     public string? BaseUrl { get; set; }
 
     /// <summary>

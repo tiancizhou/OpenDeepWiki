@@ -352,6 +352,22 @@
   }
 
   // SSE流式对话
+  function getSSEContent(data, rawData) {
+    if (typeof data === 'string') {
+      return data;
+    }
+
+    if (data && typeof data === 'object' && typeof data.data === 'string') {
+      return data.data;
+    }
+
+    if (rawData !== undefined) {
+      return rawData;
+    }
+
+    return null;
+  }
+
   function streamChat(messages, onContent, onDone, onError, onStatus) {
     var url = config.apiBaseUrl + '/api/v1/embed/stream';
     
@@ -421,7 +437,10 @@
 
               var eventType = currentEventType || (parsed && parsed.type);
               if (eventType === 'content') {
-                onContent(typeof parsed === 'string' ? parsed : parsed.data);
+                var contentChunk = getSSEContent(parsed, dataStr);
+                if (contentChunk !== null) {
+                  onContent(contentChunk);
+                }
               } else if (eventType === 'thinking') {
                 onStatus('正在思考...');
               } else if (eventType === 'tool_call') {
@@ -663,11 +682,10 @@
     }
 
     if (ball) {
-      ball.innerHTML = state.isOpen
-        ? '<span style="color: white;">' + icons.close + '</span>'
-        : (config.iconUrl
-            ? '<img src="' + config.iconUrl + '" alt="Chat" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">'
-            : icons.assistant);
+      ball.style.display = state.isOpen ? 'none' : 'flex';
+      ball.innerHTML = config.iconUrl
+        ? '<img src="' + config.iconUrl + '" alt="Chat" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">'
+        : icons.assistant;
       ball.setAttribute('data-open', state.isOpen ? 'true' : 'false');
       ball.setAttribute('aria-label', state.isOpen ? '关闭对话助手' : '打开对话助手');
     }

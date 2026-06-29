@@ -50,6 +50,23 @@ interface SSEEvent {
   data: unknown
 }
 
+function getSSEContent(data: unknown, rawData?: string): string | null {
+  if (typeof data === 'string') {
+    return data
+  }
+
+  if (data && typeof data === 'object' && 'data' in data) {
+    const nestedData = (data as { data?: unknown }).data
+    return typeof nestedData === 'string' ? nestedData : null
+  }
+
+  if (rawData !== undefined) {
+    return rawData
+  }
+
+  return null
+}
+
 /**
  * 错误信息
  */
@@ -360,8 +377,11 @@ export function EmbedChatWidget({
 
               if (event) {
                 if (event.type === 'content') {
-                  assistantContent += event.data as string
-                  updateAssistantMessage(assistantContent)
+                  const contentChunk = getSSEContent(event.data, dataStr)
+                  if (contentChunk !== null) {
+                    assistantContent += contentChunk
+                    updateAssistantMessage(assistantContent)
+                  }
                 } else if (event.type === 'thinking') {
                   if (!assistantContent) {
                     updateAssistantMessage('正在思考...')
