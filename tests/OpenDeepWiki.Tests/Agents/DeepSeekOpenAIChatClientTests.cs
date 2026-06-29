@@ -230,11 +230,18 @@ public class DeepSeekOpenAIChatClientTests
             updates.Add(update);
         }
 
-        var reasoning = string.Concat(updates
+        var toolCallUpdate = updates.Single(update =>
+            update.Contents.OfType<FunctionCallContent>().Any());
+        var streamedReasoning = string.Concat(updates
+            .Where(update => !ReferenceEquals(update, toolCallUpdate))
             .SelectMany(update => update.Contents)
             .OfType<TextReasoningContent>()
             .Select(content => content.Text));
-        Assert.Equal("think more", reasoning);
+        Assert.Equal("think more", streamedReasoning);
+
+        Assert.Equal("think more", string.Concat(toolCallUpdate.Contents
+            .OfType<TextReasoningContent>()
+            .Select(content => content.Text)));
 
         var conversation = new List<ChatMessage>
         {

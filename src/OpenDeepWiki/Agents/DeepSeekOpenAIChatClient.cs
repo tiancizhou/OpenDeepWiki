@@ -93,6 +93,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         string? modelId = null;
         DateTimeOffset? createdAt = null;
         var messageId = Guid.NewGuid().ToString("N");
+        var reasoningBuilder = new StringBuilder();
 
         await foreach (var payload in ReadSseDataAsync(stream, cancellationToken))
         {
@@ -151,6 +152,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
 
                 if (!string.IsNullOrEmpty(delta?.ReasoningContent))
                 {
+                    reasoningBuilder.Append(delta.ReasoningContent);
                     var reasoningContent = new TextReasoningContent(delta.ReasoningContent)
                     {
                         AdditionalProperties = new AdditionalPropertiesDictionary
@@ -186,7 +188,8 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                         modelId,
                         createdAt,
                         finishReason,
-                        payload);
+                        payload,
+                        reasoningBuilder.ToString());
                 }
                 else if (finishReason != null)
                 {
@@ -213,7 +216,8 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                 modelId ?? _model,
                 createdAt,
                 ChatFinishReason.ToolCalls,
-                null);
+                null,
+                reasoningBuilder.ToString());
         }
     }
 
@@ -667,9 +671,23 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         string? modelId,
         DateTimeOffset? createdAt,
         ChatFinishReason? finishReason,
-        string? rawPayload)
+        string? rawPayload,
+        string? reasoningContent = null)
     {
-        var contents = toolCalls
+        var contents = new List<AIContent>();
+
+        if (!string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            contents.Add(new TextReasoningContent(reasoningContent)
+            {
+                AdditionalProperties = new AdditionalPropertiesDictionary
+                {
+                    ["reasoning_content"] = reasoningContent
+                }
+            });
+        }
+
+        contents.AddRange(toolCalls
             .OrderBy(pair => pair.Key)
             .Select(pair => pair.Value)
             .Where(call => !string.IsNullOrWhiteSpace(call.Id) && !string.IsNullOrWhiteSpace(call.Name))
@@ -677,9 +695,9 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                 call.Id!,
                 call.Name!,
                 ParseArguments(call.Arguments.ToString())))
-            .ToList();
+            .ToList());
 
-        return new ChatResponseUpdate(ChatRole.Assistant, contents)
+        var update = new ChatResponseUpdate(ChatRole.Assistant, contents)
         {
             ResponseId = responseId,
             MessageId = messageId,
@@ -688,6 +706,16 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             FinishReason = finishReason,
             RawRepresentation = rawPayload
         };
+
+        if (!string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            update.AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["reasoning_content"] = reasoningContent
+            };
+        }
+
+        return update;
     }
 
     private static void AccumulateToolCalls(
