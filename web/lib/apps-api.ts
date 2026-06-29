@@ -15,6 +15,7 @@ import { api } from './api-client'
 export interface CreateChatAppDto {
   name: string
   description?: string
+  systemPrompt?: string
   iconUrl?: string
   enableDomainValidation: boolean
   allowedDomains?: string[]
@@ -37,6 +38,7 @@ export interface CreateChatAppDto {
 export interface UpdateChatAppDto {
   name?: string
   description?: string
+  systemPrompt?: string
   iconUrl?: string
   enableDomainValidation?: boolean
   allowedDomains?: string[]
@@ -62,6 +64,7 @@ export interface ChatAppDto {
   userId: string
   name: string
   description?: string
+  systemPrompt?: string
   iconUrl?: string
   appId: string
   appSecret?: string

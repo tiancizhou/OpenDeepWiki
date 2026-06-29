@@ -314,6 +314,17 @@ export default function AppDetailPage() {
               </div>
             </div>
 
+            {app.systemPrompt && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  {t("apps.form.systemPrompt")}
+                </label>
+                <pre className="whitespace-pre-wrap rounded-md bg-muted p-4 text-sm leading-relaxed">
+                  {app.systemPrompt}
+                </pre>
+              </div>
+            )}
+
             {/* Embed Script */}
             <div className="space-y-2">
               <label className="text-sm font-medium">
@@ -338,7 +349,7 @@ export default function AppDetailPage() {
             </div>
 
             {/* Configuration Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4 pt-4 border-t">
               <div>
                 <p className="text-sm text-muted-foreground">
                   {t("apps.form.providerType")}
@@ -359,6 +370,14 @@ export default function AppDetailPage() {
                   {app.enableDomainValidation
                     ? t("apps.card.active")
                     : t("apps.card.inactive")}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {t("apps.form.systemPrompt")}
+                </p>
+                <p className="font-medium">
+                  {app.systemPrompt ? t("apps.card.active") : "-"}
                 </p>
               </div>
               <div>

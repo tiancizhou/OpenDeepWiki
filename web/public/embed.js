@@ -871,6 +871,18 @@
       isMarkdownTableSeparator(lines[index + 1]);
   }
 
+  function normalizeMarkdownBlocks(text) {
+    return text
+      .replace(/\r\n?/g, '\n')
+      .replace(/\s*\|\|\s*/g, '\n|')
+      .replace(/([^\n])(-{3,})(?=#{1,6}\s*)/g, '$1\n\n$2\n\n')
+      .replace(/(^|\n)\s*(-{3,})\s*(?=#{1,6}\s*)/g, '$1$2\n\n')
+      .replace(/([^\n])((?:#{2,6})\s+)/g, '$1\n\n$2')
+      .replace(/([。！？；;:：])\s+((?:[-*+])\s+)/g, '$1\n$2')
+      .replace(/([。！？；;:：])\s+(\d+[.)]\s+)/g, '$1\n$2')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
   function splitMarkdownTableRow(line) {
     return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function(cell) {
       return cell.trim();
@@ -918,6 +930,7 @@
     var line = lines[index];
     return !line.trim() ||
       /^@@ODW_CODE_BLOCK_\d+@@$/.test(line.trim()) ||
+      /^-{3,}$/.test(line.trim()) ||
       /^(#{1,4})\s+/.test(line) ||
       /^\s*[-*+]\s+/.test(line) ||
       /^\s*\d+[.)]\s+/.test(line) ||
@@ -930,7 +943,7 @@
 
     var isDark = config.theme === 'dark';
     var codeBlocks = [];
-    text = text.replace(/\r\n?/g, '\n').replace(/```([^\n`]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+    text = normalizeMarkdownBlocks(text).replace(/```([^\n`]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
       var index = codeBlocks.length;
       var label = lang && lang.trim()
         ? '<div style="color: #94a3b8; font-size: 12px; margin-bottom: 6px;">' + escapeHtml(lang.trim()) + '</div>'
@@ -959,6 +972,11 @@
         continue;
       }
 
+      if (/^-{3,}$/.test(trimmed)) {
+        output.push('<hr style="border: 0; border-top: 1px solid ' + (isDark ? '#4b5563' : '#d1d5db') + '; margin: 12px 0;">');
+        continue;
+      }
+
       if (isMarkdownTableStart(lines, i)) {
         var tableLines = [lines[i], lines[i + 1]];
         i += 2;
@@ -971,7 +989,7 @@
         continue;
       }
 
-      var headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      var headingMatch = line.match(/^(#{1,6})\s*(.+)$/);
       if (headingMatch) {
         var level = Math.min(headingMatch[1].length, 4);
         var fontSize = level === 1 ? '18px' : level === 2 ? '16px' : '15px';

@@ -358,6 +358,7 @@ public class EmbedService : IEmbedService
         var systemPrompt = BuildEnhancedSystemPrompt(
             app.Name,
             app.Description,
+            app.SystemPrompt,
             knowledgeContext.Owner,
             knowledgeContext.Repo,
             knowledgeContext.Branch,
@@ -620,7 +621,7 @@ public class EmbedService : IEmbedService
     /// <summary>
     /// Builds chat messages from DTOs.
     /// </summary>
-    private static List<ChatMessage> BuildChatMessages(List<ChatMessageDto> messages)
+    internal static List<ChatMessage> BuildChatMessages(List<ChatMessageDto> messages)
     {
         var chatMessages = new List<ChatMessage>();
 
@@ -630,8 +631,6 @@ public class EmbedService : IEmbedService
             {
                 "user" => ChatRole.User,
                 "assistant" => ChatRole.Assistant,
-                "system" => ChatRole.System,
-                "tool" => ChatRole.Tool,
                 _ => ChatRole.User
             };
 
@@ -678,9 +677,10 @@ public class EmbedService : IEmbedService
     /// Builds an enhanced system prompt with professional structure.
     /// Uses XML-like tags for clear section boundaries.
     /// </summary>
-    private static string BuildEnhancedSystemPrompt(
+    internal static string BuildEnhancedSystemPrompt(
         string appName,
         string? appDescription,
+        string? appSystemPrompt,
         string? owner,
         string? repo,
         string? branch,
@@ -699,6 +699,15 @@ public class EmbedService : IEmbedService
         sb.AppendLine("You MUST use internal thinking to analyze problems thoroughly before responding.");
         sb.AppendLine("</identity>");
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(appSystemPrompt))
+        {
+            sb.AppendLine("<application_instructions>");
+            sb.AppendLine("The application owner provided these instructions. Follow them as the primary behavior guide unless they conflict with system safety, repository-grounding, or tool-usage requirements.");
+            sb.AppendLine(appSystemPrompt.Trim());
+            sb.AppendLine("</application_instructions>");
+            sb.AppendLine();
+        }
 
         // Capabilities Section
         sb.AppendLine("<capabilities>");

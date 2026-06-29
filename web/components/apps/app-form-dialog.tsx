@@ -56,6 +56,7 @@ export function AppFormDialog({
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [systemPrompt, setSystemPrompt] = useState("");
   const [iconUrl, setIconUrl] = useState("");
   const [enableDomainValidation, setEnableDomainValidation] = useState(false);
   const [allowedDomains, setAllowedDomains] = useState("");
@@ -76,6 +77,7 @@ export function AppFormDialog({
     if (app) {
       setName(app.name);
       setDescription(app.description || "");
+      setSystemPrompt(app.systemPrompt || "");
       setIconUrl(app.iconUrl || "");
       setEnableDomainValidation(app.enableDomainValidation);
       setAllowedDomains(app.allowedDomains.join("\n"));
@@ -93,6 +95,7 @@ export function AppFormDialog({
     } else {
       setName("");
       setDescription("");
+      setSystemPrompt("");
       setIconUrl("");
       setEnableDomainValidation(false);
       setAllowedDomains("");
@@ -255,6 +258,7 @@ export function AppFormDialog({
         const updateDto: UpdateChatAppDto = {
           name: name.trim(),
           description: description.trim() || undefined,
+          systemPrompt: systemPrompt.trim(),
           iconUrl: iconUrl.trim() || undefined,
           enableDomainValidation,
           allowedDomains: domainsArray,
@@ -273,6 +277,7 @@ export function AppFormDialog({
         const createDto: CreateChatAppDto = {
           name: name.trim(),
           description: description.trim() || undefined,
+          systemPrompt: systemPrompt.trim() || undefined,
           iconUrl: iconUrl.trim() || undefined,
           enableDomainValidation,
           allowedDomains: domainsArray,
@@ -396,6 +401,20 @@ export function AppFormDialog({
                 placeholder={t("apps.form.descriptionPlaceholder")}
                 rows={2}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="systemPrompt">{t("apps.form.systemPrompt")}</Label>
+              <Textarea
+                id="systemPrompt"
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                placeholder={t("apps.form.systemPromptPlaceholder")}
+                rows={5}
+              />
+              <p className="text-sm text-muted-foreground">
+                {t("apps.form.systemPromptHint")}
+              </p>
             </div>
 
             <div className="space-y-2">

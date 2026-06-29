@@ -206,6 +206,50 @@ public class ChatAppServicePropertyTests
     }
 
     [Fact]
+    public async Task CreateAppAsync_ShouldPersistSystemPrompt()
+    {
+        using var context = CreateContext();
+        var service = new ChatAppService(context, NullLogger);
+
+        var app = await service.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "Docs Bot",
+            SystemPrompt = "你是一个严谨的知识库助手。",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test",
+            AvailableModels = new List<string> { "gpt-4o-mini" },
+            DefaultModel = "gpt-4o-mini"
+        });
+
+        Assert.Equal("你是一个严谨的知识库助手。", app.SystemPrompt);
+    }
+
+    [Fact]
+    public async Task UpdateAppAsync_ShouldClearSystemPrompt()
+    {
+        using var context = CreateContext();
+        var service = new ChatAppService(context, NullLogger);
+
+        var app = await service.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "Docs Bot",
+            SystemPrompt = "Only answer from docs.",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test",
+            AvailableModels = new List<string> { "gpt-4o-mini" },
+            DefaultModel = "gpt-4o-mini"
+        });
+
+        var updated = await service.UpdateAppAsync(app.Id, "user1", new UpdateChatAppDto
+        {
+            SystemPrompt = string.Empty
+        });
+
+        Assert.NotNull(updated);
+        Assert.Null(updated.SystemPrompt);
+    }
+
+    [Fact]
     public async Task UpdateAppAsync_ShouldClearKnowledgeBinding()
     {
         using var context = CreateContext();

@@ -744,6 +744,18 @@ function isMarkdownTableStart(lines: string[], index: number) {
     isMarkdownTableSeparator(lines[index + 1])
 }
 
+function normalizeMarkdownBlocks(text: string) {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/\s*\|\|\s*/g, '\n|')
+    .replace(/([^\n])(-{3,})(?=#{1,6}\s*)/g, '$1\n\n$2\n\n')
+    .replace(/(^|\n)\s*(-{3,})\s*(?=#{1,6}\s*)/g, '$1$2\n\n')
+    .replace(/([^\n])((?:#{2,6})\s+)/g, '$1\n\n$2')
+    .replace(/([。！？；;:：])\s+((?:[-*+])\s+)/g, '$1\n$2')
+    .replace(/([。！？；;:：])\s+(\d+[.)]\s+)/g, '$1\n$2')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
 function splitMarkdownTableRow(line: string) {
   return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
 }
@@ -781,6 +793,7 @@ function isMarkdownBlockStart(lines: string[], index: number) {
   const line = lines[index]
   return !line.trim() ||
     /^@@ODW_CODE_BLOCK_\d+@@$/.test(line.trim()) ||
+    /^-{3,}$/.test(line.trim()) ||
     /^(#{1,4})\s+/.test(line) ||
     /^\s*[-*+]\s+/.test(line) ||
     /^\s*\d+[.)]\s+/.test(line) ||
@@ -789,8 +802,7 @@ function isMarkdownBlockStart(lines: string[], index: number) {
 
 function renderMarkdown(content: string, isDark: boolean) {
   const fencedCodeBlocks: string[] = []
-  const normalizedContent = content
-    .replace(/\r\n?/g, '\n')
+  const normalizedContent = normalizeMarkdownBlocks(content)
     .replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
       const index = fencedCodeBlocks.length
       const language = lang?.trim()
@@ -818,6 +830,11 @@ function renderMarkdown(content: string, isDark: boolean) {
       continue
     }
 
+    if (/^-{3,}$/.test(trimmed)) {
+      output.push(`<hr class="my-3 border-0 border-t ${isDark ? 'border-gray-500' : 'border-gray-300'}" />`)
+      continue
+    }
+
     if (isMarkdownTableStart(lines, i)) {
       const tableLines = [lines[i], lines[i + 1]]
       i += 2
@@ -830,7 +847,7 @@ function renderMarkdown(content: string, isDark: boolean) {
       continue
     }
 
-    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/)
+    const headingMatch = line.match(/^(#{1,6})\s*(.+)$/)
     if (headingMatch) {
       const level = Math.min(headingMatch[1].length, 4)
       const sizeClass = level === 1 ? 'text-lg' : level === 2 ? 'text-base' : 'text-[15px]'

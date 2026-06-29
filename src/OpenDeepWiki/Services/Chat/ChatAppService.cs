@@ -14,6 +14,7 @@ public class CreateChatAppDto
 {
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? SystemPrompt { get; set; }
     public string? IconUrl { get; set; }
     public bool EnableDomainValidation { get; set; }
     public List<string>? AllowedDomains { get; set; }
@@ -37,6 +38,7 @@ public class UpdateChatAppDto
 {
     public string? Name { get; set; }
     public string? Description { get; set; }
+    public string? SystemPrompt { get; set; }
     public string? IconUrl { get; set; }
     public bool? EnableDomainValidation { get; set; }
     public List<string>? AllowedDomains { get; set; }
@@ -64,6 +66,7 @@ public class ChatAppDto
     public string UserId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public string? SystemPrompt { get; set; }
     public string? IconUrl { get; set; }
     public string AppId { get; set; } = string.Empty;
     public string? AppSecret { get; set; }
@@ -168,6 +171,7 @@ public class ChatAppService : IChatAppService
             UserId = userId,
             Name = dto.Name,
             Description = dto.Description,
+            SystemPrompt = NormalizeOptional(dto.SystemPrompt),
             IconUrl = dto.IconUrl,
             AppId = GenerateAppId(),
             AppSecret = GenerateAppSecret(),
@@ -239,6 +243,7 @@ public class ChatAppService : IChatAppService
 
         if (dto.Name != null) app.Name = dto.Name;
         if (dto.Description != null) app.Description = dto.Description;
+        if (dto.SystemPrompt != null) app.SystemPrompt = NormalizeOptional(dto.SystemPrompt);
         if (dto.IconUrl != null) app.IconUrl = dto.IconUrl;
         if (dto.EnableDomainValidation.HasValue) app.EnableDomainValidation = dto.EnableDomainValidation.Value;
         if (dto.AllowedDomains != null) app.AllowedDomains = JsonSerializer.Serialize(dto.AllowedDomains);
@@ -403,6 +408,7 @@ public class ChatAppService : IChatAppService
             UserId = app.UserId,
             Name = app.Name,
             Description = app.Description,
+            SystemPrompt = app.SystemPrompt,
             IconUrl = app.IconUrl,
             AppId = app.AppId,
             AppSecret = includeSecret ? app.AppSecret : null,

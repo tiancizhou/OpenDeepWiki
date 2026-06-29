@@ -29,6 +29,12 @@ public class ChatApp : AggregateRoot<Guid>
     public string? Description { get; set; }
 
     /// <summary>
+    /// 应用系统提示词，用于约束外挂聊天助手的角色、边界和回答风格
+    /// </summary>
+    [StringLength(4000)]
+    public string? SystemPrompt { get; set; }
+
+    /// <summary>
     /// 应用图标URL
     /// </summary>
     [StringLength(500)]
