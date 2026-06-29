@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -23,6 +24,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
     private readonly HttpClient _httpClient;
     private readonly AiRequestOptions _options;
     private readonly bool _disposeHttpClient;
+    private readonly ConcurrentDictionary<string, string> _reasoningByToolCallId = new();
 
     public DeepSeekOpenAIChatClient(
         string model,
@@ -59,6 +61,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         var choice = completion.Choices?.FirstOrDefault();
         var message = choice?.Message ?? new ChatMessageDto();
         var chatMessage = CreateAssistantMessage(message);
+        RememberReasoningForToolCalls(chatMessage);
 
         return new ChatResponse(chatMessage)
         {
@@ -181,7 +184,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                 if (finishReason == ChatFinishReason.ToolCalls && toolCalls.Count > 0)
                 {
                     emittedToolCalls = true;
-                    yield return CreateToolCallsUpdate(
+                    var toolCallsUpdate = CreateToolCallsUpdate(
                         toolCalls,
                         responseId,
                         messageId,
@@ -190,6 +193,8 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                         finishReason,
                         payload,
                         reasoningBuilder.ToString());
+                    RememberReasoningForToolCalls(toolCallsUpdate);
+                    yield return toolCallsUpdate;
                 }
                 else if (finishReason != null)
                 {
@@ -209,7 +214,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
 
         if (!emittedToolCalls && toolCalls.Count > 0)
         {
-            yield return CreateToolCallsUpdate(
+            var toolCallsUpdate = CreateToolCallsUpdate(
                 toolCalls,
                 responseId,
                 messageId,
@@ -218,6 +223,8 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                 ChatFinishReason.ToolCalls,
                 null,
                 reasoningBuilder.ToString());
+            RememberReasoningForToolCalls(toolCallsUpdate);
+            yield return toolCallsUpdate;
         }
     }
 
@@ -278,7 +285,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         return request;
     }
 
-    private static JsonArray BuildMessages(IEnumerable<ChatMessage> messages)
+    private JsonArray BuildMessages(IEnumerable<ChatMessage> messages)
     {
         var array = new JsonArray();
         foreach (var message in messages)
@@ -309,7 +316,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             var text = GetText(message.Contents);
             node["content"] = string.IsNullOrEmpty(text) && functionCalls.Count > 0 ? null : text;
 
-            var reasoningContent = GetReasoningContent(message);
+            var reasoningContent = GetReasoningContent(message, functionCalls);
             if (role == "assistant" && !string.IsNullOrEmpty(reasoningContent))
             {
                 node["reasoning_content"] = reasoningContent;
@@ -720,6 +727,46 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         return update;
     }
 
+    private void RememberReasoningForToolCalls(ChatResponseUpdate update)
+    {
+        var reasoningContent = GetReasoningContent(update.Contents, update.AdditionalProperties);
+        if (string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            return;
+        }
+
+        foreach (var functionCall in update.Contents.OfType<FunctionCallContent>())
+        {
+            if (!string.IsNullOrWhiteSpace(functionCall.CallId))
+            {
+                _reasoningByToolCallId[functionCall.CallId] = reasoningContent;
+            }
+        }
+    }
+
+    private void RememberReasoningForToolCalls(ChatMessage message)
+    {
+        var functionCalls = message.Contents.OfType<FunctionCallContent>().ToList();
+        if (functionCalls.Count == 0)
+        {
+            return;
+        }
+
+        var reasoningContent = GetReasoningContent(message, functionCalls);
+        if (string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            return;
+        }
+
+        foreach (var functionCall in functionCalls)
+        {
+            if (!string.IsNullOrWhiteSpace(functionCall.CallId))
+            {
+                _reasoningByToolCallId[functionCall.CallId] = reasoningContent;
+            }
+        }
+    }
+
     private static void AccumulateToolCalls(
         Dictionary<int, StreamingToolCallBuilder> toolCalls,
         IReadOnlyList<ToolCallDeltaDto>? deltas)
@@ -914,22 +961,44 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         return string.Concat(contents.OfType<TextContent>().Select(content => content.Text));
     }
 
-    private static string GetReasoningContent(ChatMessage message)
+    private string GetReasoningContent(ChatMessage message, IReadOnlyList<FunctionCallContent>? functionCalls = null)
     {
         if (TryReadString(message.AdditionalProperties, "reasoning_content", out var rawReasoning))
         {
             return rawReasoning;
         }
 
-        foreach (var functionCall in message.Contents.OfType<FunctionCallContent>())
+        functionCalls ??= message.Contents.OfType<FunctionCallContent>().ToList();
+        foreach (var functionCall in functionCalls)
         {
             if (TryReadString(functionCall.AdditionalProperties, "reasoning_content", out var functionCallReasoning))
             {
                 return functionCallReasoning;
             }
+
+            if (!string.IsNullOrWhiteSpace(functionCall.CallId) &&
+                _reasoningByToolCallId.TryGetValue(functionCall.CallId, out var cachedReasoning) &&
+                !string.IsNullOrWhiteSpace(cachedReasoning))
+            {
+                return cachedReasoning;
+            }
         }
 
-        var reasoning = string.Concat(message.Contents
+        return GetReasoningContent(message.Contents, null);
+    }
+
+    private static string GetReasoningContent(
+        IEnumerable<AIContent> contents,
+        AdditionalPropertiesDictionary? additionalProperties)
+    {
+        if (TryReadString(additionalProperties, "reasoning_content", out var rawReasoning))
+        {
+            return rawReasoning;
+        }
+
+        var contentList = contents as IReadOnlyList<AIContent> ?? contents.ToList();
+
+        var reasoning = string.Concat(contentList
             .OfType<TextReasoningContent>()
             .Select(content => content.Text));
         if (!string.IsNullOrEmpty(reasoning))
@@ -937,7 +1006,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             return reasoning;
         }
 
-        foreach (var content in message.Contents)
+        foreach (var content in contentList)
         {
             if (TryReadString(content.AdditionalProperties, "reasoning_content", out var contentReasoning))
             {

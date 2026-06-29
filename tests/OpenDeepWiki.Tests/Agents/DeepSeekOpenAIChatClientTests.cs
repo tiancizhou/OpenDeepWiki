@@ -297,6 +297,50 @@ public class DeepSeekOpenAIChatClientTests
         Assert.True(assistant.TryGetProperty("tool_calls", out _));
     }
 
+    [Fact]
+    public async Task GetResponseAsync_RestoresReasoningContentFromCachedToolCallId()
+    {
+        var requestIndex = 0;
+        var handler = new StubHttpMessageHandler(_ => requestIndex++ == 0
+            ? EventStreamResponse("""
+                data: {"id":"chatcmpl-test","model":"deepseek-v4-flash","choices":[{"delta":{"reasoning_content":"need learning data"},"finish_reason":null}]}
+
+                data: {"id":"chatcmpl-test","model":"deepseek-v4-flash","choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_learning","type":"function","function":{"name":"PlayEduLearningData","arguments":"{\"input\":\"overview\"}"}}]},"finish_reason":"tool_calls"}]}
+
+                data: [DONE]
+
+                """)
+            : JsonResponse("""
+                {"id":"chatcmpl-test-2","model":"deepseek-v4-flash","choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}
+                """));
+        var client = CreateClient(handler);
+
+        await foreach (var _ in client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "query learning data")]))
+        {
+        }
+
+        var reconstructedFunctionCall = new FunctionCallContent(
+            "call_learning",
+            "PlayEduLearningData",
+            new Dictionary<string, object?>
+            {
+                ["input"] = "overview"
+            });
+
+        await client.GetResponseAsync([
+            new ChatMessage(ChatRole.User, "query learning data"),
+            new ChatMessage(ChatRole.Assistant, [reconstructedFunctionCall]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call_learning", "{\"ok\":true}")])
+        ]);
+
+        using var document = JsonDocument.Parse(handler.RequestBodies[1]);
+        var messages = document.RootElement.GetProperty("messages").EnumerateArray().ToArray();
+        var assistant = messages.Single(message =>
+            message.GetProperty("role").GetString() == "assistant");
+        Assert.Equal("need learning data", assistant.GetProperty("reasoning_content").GetString());
+        Assert.True(assistant.TryGetProperty("tool_calls", out _));
+    }
+
     private static DeepSeekOpenAIChatClient CreateClient(
         StubHttpMessageHandler handler,
         AiRequestOptions? options = null)
