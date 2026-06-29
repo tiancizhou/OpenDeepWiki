@@ -654,10 +654,11 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                     continue;
                 }
 
-                contents.Add(new FunctionCallContent(
+                contents.Add(CreateFunctionCallContent(
                     toolCall.Id,
                     function.Name,
-                    ParseArguments(function.Arguments)));
+                    ParseArguments(function.Arguments),
+                    message.ReasoningContent));
             }
         }
 
@@ -691,10 +692,11 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             .OrderBy(pair => pair.Key)
             .Select(pair => pair.Value)
             .Where(call => !string.IsNullOrWhiteSpace(call.Id) && !string.IsNullOrWhiteSpace(call.Name))
-            .Select(call => (AIContent)new FunctionCallContent(
+            .Select(call => (AIContent)CreateFunctionCallContent(
                 call.Id!,
                 call.Name!,
-                ParseArguments(call.Arguments.ToString())))
+                ParseArguments(call.Arguments.ToString()),
+                reasoningContent))
             .ToList());
 
         var update = new ChatResponseUpdate(ChatRole.Assistant, contents)
@@ -752,6 +754,26 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
                 builder.Arguments.Append(delta.Function.Arguments);
             }
         }
+    }
+
+    private static FunctionCallContent CreateFunctionCallContent(
+        string callId,
+        string name,
+        IDictionary<string, object?> arguments,
+        string? reasoningContent = null)
+    {
+        if (string.IsNullOrWhiteSpace(reasoningContent))
+        {
+            return new FunctionCallContent(callId, name, arguments);
+        }
+
+        return new FunctionCallContent(callId, name, arguments)
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["reasoning_content"] = reasoningContent
+            }
+        };
     }
 
     private static async IAsyncEnumerable<string> ReadSseDataAsync(
@@ -894,6 +916,19 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
 
     private static string GetReasoningContent(ChatMessage message)
     {
+        if (TryReadString(message.AdditionalProperties, "reasoning_content", out var rawReasoning))
+        {
+            return rawReasoning;
+        }
+
+        foreach (var functionCall in message.Contents.OfType<FunctionCallContent>())
+        {
+            if (TryReadString(functionCall.AdditionalProperties, "reasoning_content", out var functionCallReasoning))
+            {
+                return functionCallReasoning;
+            }
+        }
+
         var reasoning = string.Concat(message.Contents
             .OfType<TextReasoningContent>()
             .Select(content => content.Text));
@@ -902,9 +937,12 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             return reasoning;
         }
 
-        if (TryReadString(message.AdditionalProperties, "reasoning_content", out var rawReasoning))
+        foreach (var content in message.Contents)
         {
-            return rawReasoning;
+            if (TryReadString(content.AdditionalProperties, "reasoning_content", out var contentReasoning))
+            {
+                return contentReasoning;
+            }
         }
 
         return string.Empty;

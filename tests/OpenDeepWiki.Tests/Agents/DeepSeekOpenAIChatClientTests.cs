@@ -262,6 +262,41 @@ public class DeepSeekOpenAIChatClientTests
         Assert.True(assistant.TryGetProperty("tool_calls", out _));
     }
 
+    [Fact]
+    public async Task GetResponseAsync_RestoresReasoningContentFromFunctionCallProperties()
+    {
+        var handler = new StubHttpMessageHandler(_ => JsonResponse("""
+            {"id":"chatcmpl-test","model":"deepseek-v4-flash","choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}
+            """));
+        var client = CreateClient(handler);
+        var functionCall = new FunctionCallContent(
+            "call_1",
+            "read_file",
+            new Dictionary<string, object?>
+            {
+                ["path"] = "README.md"
+            })
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["reasoning_content"] = "need to inspect the file"
+            }
+        };
+
+        await client.GetResponseAsync([
+            new ChatMessage(ChatRole.User, "read"),
+            new ChatMessage(ChatRole.Assistant, [functionCall]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call_1", "file contents")])
+        ]);
+
+        using var document = JsonDocument.Parse(handler.RequestBodies.Single());
+        var messages = document.RootElement.GetProperty("messages").EnumerateArray().ToArray();
+        var assistant = messages.Single(message =>
+            message.GetProperty("role").GetString() == "assistant");
+        Assert.Equal("need to inspect the file", assistant.GetProperty("reasoning_content").GetString());
+        Assert.True(assistant.TryGetProperty("tool_calls", out _));
+    }
+
     private static DeepSeekOpenAIChatClient CreateClient(
         StubHttpMessageHandler handler,
         AiRequestOptions? options = null)
