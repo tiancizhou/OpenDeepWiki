@@ -37,6 +37,47 @@ import {
 import { AppFormDialog, AppStatisticsChart, AppLogsTable } from "@/components/apps";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+async function copyTextToClipboard(text: string) {
+  if (!text) {
+    return false;
+  }
+
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Fall back for non-secure contexts, denied permissions, and older browsers.
+    }
+  }
+
+  if (typeof document === "undefined" || !document.body) {
+    return false;
+  }
+
+  const textArea = document.createElement("textarea");
+  textArea.value = text;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.top = "0";
+  textArea.style.left = "0";
+  textArea.style.width = "1px";
+  textArea.style.height = "1px";
+  textArea.style.padding = "0";
+  textArea.style.border = "0";
+  textArea.style.opacity = "0";
+
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    document.body.removeChild(textArea);
+  }
+}
+
 export default function AppDetailPage() {
   const t = useTranslations();
   const router = useRouter();
@@ -78,10 +119,10 @@ export default function AppDetailPage() {
   }, [authLoading, isAuthenticated, fetchApp]);
 
   const handleCopy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      // Could add a toast notification here
-    } catch {
+    const copied = await copyTextToClipboard(text);
+    if (copied) {
+      setError(null);
+    } else {
       setError(t("apps.detail.copyFailed"));
     }
   };
