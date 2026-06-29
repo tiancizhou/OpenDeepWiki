@@ -1,6 +1,7 @@
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,6 +12,7 @@ using OpenDeepWiki.Entities;
 using OpenDeepWiki.Services.AI;
 using OpenDeepWiki.Services.Chat;
 using OpenDeepWiki.Services.Repositories;
+using Xunit;
 
 namespace OpenDeepWiki.Tests.Services.Chat;
 
@@ -78,86 +80,49 @@ public class EmbedServiceAppConfigPropertyTests
             });
     }
 
-    /// <summary>
-    /// Property 12: 应用配置应用正确性 - GetAppConfigAsync应该返回正确的可用模型列表
-    /// For any valid app, GetAppConfigAsync should return the correct available models.
-    /// Validates: Requirements 13.5
-    /// </summary>
-    [Property(MaxTest = 100)]
-    public Property GetAppConfig_ShouldReturnCorrectAvailableModels()
+    [Fact]
+    public async Task GetAppConfig_ShouldNotExposeModelConfiguration()
     {
-        return Prop.ForAll(
-            AppConfigGenerators.ModelListArb(),
-            AppConfigGenerators.ApiKeyArb(),
-            (models, apiKey) =>
-            {
-                using var context = CreateInMemoryContext();
-                var chatAppService = new ChatAppService(context, ChatAppLogger);
-                var statsService = new AppStatisticsService(context, StatsLogger);
-                var logService = new ChatLogService(context, LogLogger);
-                var embedService = new EmbedService(
-                    context, null!, chatAppService, statsService, logService, null!, TestAiProviderResolver.Instance, RepoOptions, EmbedLogger);
+        using var context = CreateInMemoryContext();
+        var chatAppService = new ChatAppService(context, ChatAppLogger);
+        var statsService = new AppStatisticsService(context, StatsLogger);
+        var logService = new ChatLogService(context, LogLogger);
+        var embedService = new EmbedService(
+            context, null!, chatAppService, statsService, logService, null!, TestAiProviderResolver.Instance, RepoOptions, EmbedLogger);
 
-                // Create app with specific models
-                var app = chatAppService.CreateAppAsync("user1", new CreateChatAppDto
-                {
-                    Name = "TestApp",
-                    ProviderType = "OpenAI",
-                    ApiKey = apiKey,
-                    AvailableModels = models,
-                    DefaultModel = models.FirstOrDefault()
-                }).GetAwaiter().GetResult();
+        var app = await chatAppService.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "TestApp",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test-key",
+            AvailableModels = new List<string> { "gpt-4o-mini", "gpt-4o" },
+            DefaultModel = "gpt-4o-mini"
+        });
 
-                // Get config
-                var config = embedService.GetAppConfigAsync(app.AppId, null)
-                    .GetAwaiter().GetResult();
+        var config = await embedService.GetAppConfigAsync(app.AppId, null);
+        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
 
-                // Verify models match
-                var modelsMatch = config.Valid &&
-                    config.AvailableModels.Count == models.Count &&
-                    config.AvailableModels.All(m => models.Contains(m));
-
-                return modelsMatch.Label($"Available models should match configured models");
-            });
+        Assert.True(config.Valid);
+        Assert.DoesNotContain("availableModels", json);
+        Assert.DoesNotContain("defaultModel", json);
+        Assert.DoesNotContain("gpt-4o", json);
     }
 
-    /// <summary>
-    /// Property 12: 应用配置应用正确性 - GetAppConfigAsync应该返回正确的默认模型
-    /// For any valid app, GetAppConfigAsync should return the correct default model.
-    /// Validates: Requirements 13.5
-    /// </summary>
-    [Property(MaxTest = 100)]
-    public Property GetAppConfig_ShouldReturnCorrectDefaultModel()
+    [Fact]
+    public void ResolveConfiguredEmbedModel_ShouldIgnoreRequestedModel()
     {
-        return Prop.ForAll(
-            AppConfigGenerators.ModelArb(),
-            AppConfigGenerators.ApiKeyArb(),
-            (defaultModel, apiKey) =>
-            {
-                using var context = CreateInMemoryContext();
-                var chatAppService = new ChatAppService(context, ChatAppLogger);
-                var statsService = new AppStatisticsService(context, StatsLogger);
-                var logService = new ChatLogService(context, LogLogger);
-                var embedService = new EmbedService(
-                    context, null!, chatAppService, statsService, logService, null!, TestAiProviderResolver.Instance, RepoOptions, EmbedLogger);
+        var app = new ChatAppDto
+        {
+            DefaultModel = "owner-approved-model",
+            AvailableModels = new List<string> { "owner-approved-model", "expensive-model" }
+        };
 
-                // Create app with specific default model
-                var app = chatAppService.CreateAppAsync("user1", new CreateChatAppDto
-                {
-                    Name = "TestApp",
-                    ProviderType = "OpenAI",
-                    ApiKey = apiKey,
-                    AvailableModels = new List<string> { defaultModel },
-                    DefaultModel = defaultModel
-                }).GetAwaiter().GetResult();
+        var model = EmbedService.ResolveConfiguredEmbedModel(app, "expensive-model");
 
-                // Get config
-                var config = embedService.GetAppConfigAsync(app.AppId, null)
-                    .GetAwaiter().GetResult();
-
-                return (config.Valid && config.DefaultModel == defaultModel)
-                    .Label($"Default model should be '{defaultModel}', got '{config.DefaultModel}'");
-            });
+        Assert.Equal("owner-approved-model", model);
     }
 
 

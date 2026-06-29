@@ -30,8 +30,6 @@ interface EmbedConfig {
   errorMessage?: string
   appName?: string
   iconUrl?: string
-  availableModels: string[]
-  defaultModel?: string
 }
 
 /**
@@ -101,7 +99,6 @@ export function EmbedChatWidget({
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
   const [input, setInput] = React.useState("")
   const [isSending, setIsSending] = React.useState(false)
-  const [selectedModel, setSelectedModel] = React.useState<string>("")
   const [error, setError] = React.useState<ErrorInfo | null>(null)
   const [lastRequest, setLastRequest] = React.useState<{
     content: string
@@ -127,7 +124,6 @@ export function EmbedChatWidget({
         if (data.valid) {
           setIsEnabled(true)
           setConfig(data)
-          setSelectedModel(data.defaultModel || data.availableModels?.[0] || '')
         } else {
           console.error('[EmbedChatWidget] ' + t("embed.configInvalid"), data.errorMessage)
           setIsEnabled(false)
@@ -267,7 +263,6 @@ export function EmbedChatWidget({
                 role: m.role,
                 content: m.content,
               })),
-              modelId: selectedModel,
             }),
           },
           DEFAULT_TIMEOUT_MS
@@ -399,7 +394,7 @@ export function EmbedChatWidget({
     
     setIsSending(false)
     abortControllerRef.current = null
-  }, [input, isSending, messages, appId, selectedModel, apiBaseUrl])
+  }, [input, isSending, messages, appId, apiBaseUrl])
 
   // 重试发送
   const handleRetry = React.useCallback(() => {
@@ -507,25 +502,6 @@ export function EmbedChatWidget({
               <span className="font-semibold">
                 {config?.appName || t("embed.title")}
               </span>
-              {config?.availableModels && config.availableModels.length > 1 && (
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  disabled={isSending}
-                  className={cn(
-                    "px-2 py-1 text-xs rounded border",
-                    isDark 
-                      ? "bg-gray-700 border-gray-600 text-white" 
-                      : "bg-white border-gray-300"
-                  )}
-                >
-                  {config.availableModels.map((model) => (
-                    <option key={model} value={model}>
-                      {model}
-                    </option>
-                  ))}
-                </select>
-              )}
             </div>
             <div className="flex items-center gap-1">
               <button

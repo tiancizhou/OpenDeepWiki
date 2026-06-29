@@ -58,8 +58,7 @@
     startX: 0,
     startWidth: 400,
     appConfig: null,
-    messages: [],
-    selectedModel: null
+    messages: []
   };
 
   // 样式定义
@@ -216,16 +215,6 @@
       'border-radius: 50%',
       'animation: odw-bounce 1.4s infinite ease-in-out both'
     ].join(';'),
-    modelSelector: [
-      'padding: 6px 12px',
-      'border: 1px solid #d1d5db',
-      'border-radius: 6px',
-      'font-size: 12px',
-      'background: #ffffff',
-      'cursor: pointer',
-      'outline: none'
-    ].join(';'),
-    modelSelectorDark: 'background: #1e293b; border-color: #475569; color: #ffffff;'
   };
 
   // 图标SVG
@@ -310,7 +299,6 @@
       if (data.valid) {
         state.isEnabled = true;
         state.appConfig = data;
-        state.selectedModel = data.defaultModel || (data.availableModels && data.availableModels[0]);
         callback(null, data);
       } else {
         console.error('[OpenDeepWiki] 配置验证失败:', data.errorMessage);
@@ -334,8 +322,7 @@
           role: msg.role,
           content: msg.content
         };
-      }),
-      modelId: state.selectedModel
+      })
     };
 
     fetch(url, {
@@ -523,8 +510,7 @@
     
     var header = createElement('div', { style: headerStyle }, [
       createElement('div', { style: 'display: flex; align-items: center; gap: 12px;' }, [
-        createElement('span', { style: 'font-weight: 600; font-size: 16px;' }, state.appConfig ? state.appConfig.appName || '对话助手' : '对话助手'),
-        renderModelSelector()
+        createElement('span', { style: 'font-weight: 600; font-size: 16px;' }, state.appConfig ? state.appConfig.appName || '对话助手' : '对话助手')
       ]),
       createElement('button', {
         style: 'background: none; border: none; cursor: pointer; padding: 4px; color: inherit;',
@@ -586,36 +572,6 @@
     container.appendChild(panel);
     return panel;
   }
-
-  // 渲染模型选择器
-  function renderModelSelector() {
-    if (!state.appConfig || !state.appConfig.availableModels || state.appConfig.availableModels.length <= 1) {
-      return null;
-    }
-
-    var isDark = config.theme === 'dark';
-    var selectorStyle = styles.modelSelector;
-    if (isDark) selectorStyle += styles.modelSelectorDark;
-
-    var select = createElement('select', {
-      id: 'odw-model-selector',
-      style: selectorStyle,
-      onChange: function() {
-        state.selectedModel = this.value;
-      }
-    });
-
-    state.appConfig.availableModels.forEach(function(model) {
-      var option = createElement('option', { value: model }, model);
-      if (model === state.selectedModel) {
-        option.selected = true;
-      }
-      select.appendChild(option);
-    });
-
-    return select;
-  }
-
 
   // 切换面板显示
   function togglePanel() {
