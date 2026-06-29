@@ -131,6 +131,9 @@ public class AppStatisticsService : IAppStatisticsService
         DateTime endDate,
         CancellationToken cancellationToken = default)
     {
+        startDate = ToUtcDate(startDate);
+        endDate = ToUtcDate(endDate);
+
         var dailyStats = await GetDailyStatisticsAsync(appId, startDate, endDate, cancellationToken);
 
         return new AggregatedStatisticsDto
@@ -152,6 +155,9 @@ public class AppStatisticsService : IAppStatisticsService
         DateTime endDate,
         CancellationToken cancellationToken = default)
     {
+        startDate = ToUtcDate(startDate);
+        endDate = ToUtcDate(endDate);
+
         var stats = await _context.AppStatistics
             .Where(s => s.AppId == appId && s.Date >= startDate.Date && s.Date <= endDate.Date)
             .OrderBy(s => s.Date)
@@ -166,5 +172,10 @@ public class AppStatisticsService : IAppStatisticsService
             .ToListAsync(cancellationToken);
 
         return stats;
+    }
+
+    private static DateTime ToUtcDate(DateTime value)
+    {
+        return DateTime.SpecifyKind(value.Date, DateTimeKind.Utc);
     }
 }

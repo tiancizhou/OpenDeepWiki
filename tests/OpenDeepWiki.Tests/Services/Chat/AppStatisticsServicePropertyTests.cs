@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OpenDeepWiki.EFCore;
 using OpenDeepWiki.Entities;
 using OpenDeepWiki.Services.Chat;
+using Xunit;
 
 namespace OpenDeepWiki.Tests.Services.Chat;
 
@@ -273,6 +274,74 @@ public class AppStatisticsServicePropertyTests
                 var stats = context.AppStatistics.FirstOrDefault(s => s.AppId == appId);
                 return stats != null && stats.Date == today;
             });
+    }
+
+    [Fact]
+    public async Task GetDailyStatisticsAsync_WithUnspecifiedDateRange_ShouldNormalizeDatesToUtc()
+    {
+        using var context = CreateTestContext();
+        var logger = NullLogger<AppStatisticsService>.Instance;
+        var service = new AppStatisticsService(context, logger);
+        var appId = "app_test_unspecified_date";
+        var statsDate = DateTime.SpecifyKind(new DateTime(2026, 6, 29), DateTimeKind.Utc);
+
+        context.AppStatistics.Add(new AppStatistics
+        {
+            Id = Guid.NewGuid(),
+            AppId = appId,
+            Date = statsDate,
+            RequestCount = 3,
+            InputTokens = 120,
+            OutputTokens = 60,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var startDate = DateTime.SpecifyKind(new DateTime(2026, 6, 29), DateTimeKind.Unspecified);
+        var endDate = DateTime.SpecifyKind(new DateTime(2026, 6, 29), DateTimeKind.Unspecified);
+
+        var result = await service.GetDailyStatisticsAsync(appId, startDate, endDate);
+
+        Assert.Single(result);
+        Assert.Equal(statsDate, result[0].Date);
+        Assert.Equal(DateTimeKind.Utc, result[0].Date.Kind);
+    }
+
+    [Fact]
+    public async Task GetStatisticsAsync_WithUnspecifiedDateRange_ShouldReturnUtcDateBounds()
+    {
+        using var context = CreateTestContext();
+        var logger = NullLogger<AppStatisticsService>.Instance;
+        var service = new AppStatisticsService(context, logger);
+        var appId = "app_test_statistics_bounds";
+
+        var startDate = DateTime.SpecifyKind(new DateTime(2026, 6, 1), DateTimeKind.Unspecified);
+        var endDate = DateTime.SpecifyKind(new DateTime(2026, 6, 30), DateTimeKind.Unspecified);
+
+        var result = await service.GetStatisticsAsync(appId, startDate, endDate);
+
+        Assert.Equal(DateTimeKind.Utc, result.StartDate.Kind);
+        Assert.Equal(DateTimeKind.Utc, result.EndDate.Kind);
+        Assert.Equal(new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc), result.StartDate);
+        Assert.Equal(new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc), result.EndDate);
+    }
+
+    [Fact]
+    public async Task RecordRequestAsync_ShouldStoreUtcDateForPostgresqlTimestampWithTimeZone()
+    {
+        using var context = CreateTestContext();
+        var logger = NullLogger<AppStatisticsService>.Instance;
+        var service = new AppStatisticsService(context, logger);
+
+        await service.RecordRequestAsync(new RecordRequestDto
+        {
+            AppId = "app_test_utc_date",
+            InputTokens = 10,
+            OutputTokens = 5
+        });
+
+        var stats = await context.AppStatistics.SingleAsync();
+        Assert.Equal(DateTimeKind.Utc, stats.Date.Kind);
     }
 }
 
