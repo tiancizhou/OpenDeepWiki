@@ -147,22 +147,40 @@ public class McpToolConverter : IMcpToolConverter
     }
 
     /// <summary>
-    /// Sanitizes the tool name to be a valid identifier.
+    /// Sanitizes the tool name to match OpenAI-compatible tool name requirements.
     /// </summary>
     private static string SanitizeToolName(string name)
     {
-        // Replace spaces and special characters with underscores
-        var sanitized = new string(name
-            .Select(c => char.IsLetterOrDigit(c) ? c : '_')
-            .ToArray());
+        var chars = name
+            .Select(c => IsAsciiToolNameChar(c) ? c : '_')
+            .ToArray();
 
-        // Ensure it starts with a letter
-        if (sanitized.Length > 0 && !char.IsLetter(sanitized[0]))
+        var sanitized = new string(chars).Trim('_', '-');
+        while (sanitized.Contains("__", StringComparison.Ordinal))
         {
-            sanitized = "Mcp_" + sanitized;
+            sanitized = sanitized.Replace("__", "_", StringComparison.Ordinal);
+        }
+
+        if (string.IsNullOrWhiteSpace(sanitized))
+        {
+            sanitized = "mcp_tool";
+        }
+
+        if (sanitized.Length > 64)
+        {
+            sanitized = sanitized[..64].Trim('_', '-');
         }
 
         return sanitized;
+    }
+
+    private static bool IsAsciiToolNameChar(char c)
+    {
+        return c is >= 'a' and <= 'z'
+            or >= 'A' and <= 'Z'
+            or >= '0' and <= '9'
+            or '_'
+            or '-';
     }
 
     private static string? NormalizeBearerToken(string? token)
