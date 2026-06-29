@@ -181,7 +181,7 @@
     ].join(';'),
     assistantMessage: [
       'align-self: flex-start',
-      'max-width: 80%',
+      'max-width: min(92%, 960px)',
       'padding: 10px 14px',
       'background: #f3f4f6',
       'color: #1f2937',
@@ -784,34 +784,179 @@
     return div.innerHTML;
   }
 
-  // 简单的Markdown格式化
+  function isSafeMarkdownUrl(url) {
+    return /^(https?:\/\/|mailto:|tel:|#|\/(?!\/))/i.test(url.trim());
+  }
+
+  function renderInlineMarkdown(text, isDark) {
+    var codeStyle = [
+      'background: ' + (isDark ? '#4b5563' : '#e5e7eb'),
+      'color: ' + (isDark ? '#f9fafb' : '#111827'),
+      'padding: 2px 6px',
+      'border-radius: 4px',
+      'font-size: 13px',
+      'font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
+    ].join(';');
+    var codes = [];
+    var html = escapeHtml(text).replace(/`([^`]+)`/g, function(match, code) {
+      var index = codes.length;
+      codes.push('<code style="' + codeStyle + '">' + code + '</code>');
+      return '\u0001INLINE_CODE_' + index + '\u0001';
+    });
+
+    html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, function(match, label, url) {
+      if (!isSafeMarkdownUrl(url)) return label;
+      return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="color: #4f46e5; text-decoration: underline; text-underline-offset: 2px;">' + label + '</a>';
+    });
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+
+    return html.replace(/\u0001INLINE_CODE_(\d+)\u0001/g, function(match, index) {
+      return codes[Number(index)] || '';
+    });
+  }
+
+  function isMarkdownTableSeparator(line) {
+    var cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|');
+    return cells.length > 0 && cells.every(function(cell) {
+      return /^\s*:?-{3,}:?\s*$/.test(cell);
+    });
+  }
+
+  function isMarkdownTableStart(lines, index) {
+    return index + 1 < lines.length &&
+      lines[index].indexOf('|') !== -1 &&
+      isMarkdownTableSeparator(lines[index + 1]);
+  }
+
+  function splitMarkdownTableRow(line) {
+    return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function(cell) {
+      return cell.trim();
+    });
+  }
+
+  function renderMarkdownTable(lines, isDark) {
+    var borderColor = isDark ? '#4b5563' : '#d1d5db';
+    var headBg = isDark ? '#475569' : '#e5e7eb';
+    var rows = lines.map(splitMarkdownTableRow);
+    var header = rows[0] || [];
+    var body = rows.slice(2);
+    var table = [
+      '<div style="overflow-x: auto; margin: 10px 0;">',
+      '<table style="border-collapse: collapse; width: 100%; min-width: 360px; font-size: 13px; line-height: 1.45;">',
+      '<thead><tr>'
+    ];
+
+    header.forEach(function(cell) {
+      table.push('<th style="border: 1px solid ' + borderColor + '; background: ' + headBg + '; padding: 7px 9px; text-align: left; font-weight: 600;">' + renderInlineMarkdown(cell, isDark) + '</th>');
+    });
+    table.push('</tr></thead><tbody>');
+
+    body.forEach(function(row) {
+      table.push('<tr>');
+      header.forEach(function(_, index) {
+        table.push('<td style="border: 1px solid ' + borderColor + '; padding: 7px 9px; vertical-align: top;">' + renderInlineMarkdown(row[index] || '', isDark) + '</td>');
+      });
+      table.push('</tr>');
+    });
+
+    table.push('</tbody></table></div>');
+    return table.join('');
+  }
+
+  function renderMarkdownList(lines, tagName, isDark) {
+    var items = lines.map(function(line) {
+      var content = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '');
+      return '<li style="margin: 0 0 4px 0; padding-left: 2px;">' + renderInlineMarkdown(content, isDark) + '</li>';
+    });
+    return '<' + tagName + ' style="margin: 8px 0 10px 18px; padding: 0;">' + items.join('') + '</' + tagName + '>';
+  }
+
+  function isMarkdownBlockStart(lines, index) {
+    var line = lines[index];
+    return !line.trim() ||
+      /^@@ODW_CODE_BLOCK_\d+@@$/.test(line.trim()) ||
+      /^(#{1,4})\s+/.test(line) ||
+      /^\s*[-*+]\s+/.test(line) ||
+      /^\s*\d+[.)]\s+/.test(line) ||
+      isMarkdownTableStart(lines, index);
+  }
+
+  // Markdown格式化
   function formatMarkdown(text) {
     if (!text) return '';
-    
-    // 转义HTML
-    text = escapeHtml(text);
-    
-    // 代码块
-    text = text.replace(/```(\w*)\n([\s\S]*?)```/g, function(match, lang, code) {
-      return '<pre style="background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 13px; margin: 8px 0;"><code>' + code + '</code></pre>';
+
+    var isDark = config.theme === 'dark';
+    var codeBlocks = [];
+    text = text.replace(/\r\n?/g, '\n').replace(/```([^\n`]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+      var index = codeBlocks.length;
+      var label = lang && lang.trim()
+        ? '<div style="color: #94a3b8; font-size: 12px; margin-bottom: 6px;">' + escapeHtml(lang.trim()) + '</div>'
+        : '';
+      codeBlocks.push(
+        '<pre style="background: #0f172a; color: #e2e8f0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.55; margin: 10px 0; white-space: pre;"><code>' +
+        label +
+        escapeHtml(code.replace(/\n$/, '')) +
+        '</code></pre>'
+      );
+      return '\n\n@@ODW_CODE_BLOCK_' + index + '@@\n\n';
     });
-    
-    // 行内代码
-    text = text.replace(/`([^`]+)`/g, '<code style="background: #e5e7eb; padding: 2px 6px; border-radius: 4px; font-size: 13px;">$1</code>');
-    
-    // 粗体
-    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    
-    // 斜体
-    text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    
-    // 链接
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" style="color: #667eea; text-decoration: underline;">$1</a>');
-    
-    // 换行
-    text = text.replace(/\n/g, '<br>');
-    
-    return text;
+
+    var lines = text.split('\n');
+    var output = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var trimmed = line.trim();
+
+      if (!trimmed) continue;
+
+      var codeMatch = trimmed.match(/^@@ODW_CODE_BLOCK_(\d+)@@$/);
+      if (codeMatch) {
+        output.push(codeBlocks[Number(codeMatch[1])] || '');
+        continue;
+      }
+
+      if (isMarkdownTableStart(lines, i)) {
+        var tableLines = [lines[i], lines[i + 1]];
+        i += 2;
+        while (i < lines.length && lines[i].indexOf('|') !== -1 && lines[i].trim()) {
+          tableLines.push(lines[i]);
+          i++;
+        }
+        i--;
+        output.push(renderMarkdownTable(tableLines, isDark));
+        continue;
+      }
+
+      var headingMatch = line.match(/^(#{1,4})\s+(.+)$/);
+      if (headingMatch) {
+        var level = Math.min(headingMatch[1].length, 4);
+        var fontSize = level === 1 ? '18px' : level === 2 ? '16px' : '15px';
+        output.push('<h' + level + ' style="font-size: ' + fontSize + '; line-height: 1.35; font-weight: 700; margin: 12px 0 8px;">' + renderInlineMarkdown(headingMatch[2], isDark) + '</h' + level + '>');
+        continue;
+      }
+
+      if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+        var ordered = /^\s*\d+[.)]\s+/.test(line);
+        var listLines = [line];
+        while (i + 1 < lines.length && (ordered ? /^\s*\d+[.)]\s+/.test(lines[i + 1]) : /^\s*[-*+]\s+/.test(lines[i + 1]))) {
+          listLines.push(lines[++i]);
+        }
+        output.push(renderMarkdownList(listLines, ordered ? 'ol' : 'ul', isDark));
+        continue;
+      }
+
+      var paragraph = [line];
+      while (i + 1 < lines.length && !isMarkdownBlockStart(lines, i + 1)) {
+        paragraph.push(lines[++i]);
+      }
+      output.push('<p style="margin: 0 0 10px;">' + paragraph.map(function(part) {
+        return renderInlineMarkdown(part, isDark);
+      }).join('<br>') + '</p>');
+    }
+
+    return output.join('');
   }
 
   // 初始化

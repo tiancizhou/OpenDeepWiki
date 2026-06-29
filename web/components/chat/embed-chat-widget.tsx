@@ -544,11 +544,11 @@ export function EmbedChatWidget({
                 <div
                   key={message.id}
                   className={cn(
-                    "max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words",
+                    "px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words",
                     message.role === 'user'
-                      ? "ml-auto bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-br-sm"
+                      ? "ml-auto max-w-[80%] bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-br-sm"
                       : cn(
-                          "mr-auto rounded-bl-sm",
+                          "mr-auto max-w-[92%] rounded-bl-sm",
                           isDark ? "bg-gray-700 text-gray-100" : "bg-gray-100 text-gray-900"
                         )
                   )}
@@ -652,41 +652,177 @@ export function EmbedChatWidget({
   )
 }
 
+function escapeMarkdownHtml(text: string) {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function isSafeMarkdownUrl(url: string) {
+  return /^(https?:\/\/|mailto:|tel:|#|\/(?!\/))/i.test(url.trim())
+}
+
+function renderInlineMarkdown(text: string, isDark: boolean) {
+  const codeClass = isDark
+    ? 'bg-gray-600 text-gray-50'
+    : 'bg-gray-200 text-gray-950'
+  const codeBlocks: string[] = []
+  let html = escapeMarkdownHtml(text).replace(/`([^`]+)`/g, (_, code) => {
+    const index = codeBlocks.length
+    codeBlocks.push(`<code class="px-1.5 py-0.5 rounded text-xs font-mono ${codeClass}">${code}</code>`)
+    return `\u0001INLINE_CODE_${index}\u0001`
+  })
+
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, label, url) => {
+    if (!isSafeMarkdownUrl(url)) return label
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="text-indigo-500 underline underline-offset-2">${label}</a>`
+  })
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  html = html.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+
+  return html.replace(/\u0001INLINE_CODE_(\d+)\u0001/g, (_, index) => codeBlocks[Number(index)] ?? '')
+}
+
+function isMarkdownTableSeparator(line: string) {
+  const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|')
+  return cells.length > 0 && cells.every((cell) => /^\s*:?-{3,}:?\s*$/.test(cell))
+}
+
+function isMarkdownTableStart(lines: string[], index: number) {
+  return index + 1 < lines.length &&
+    lines[index].includes('|') &&
+    isMarkdownTableSeparator(lines[index + 1])
+}
+
+function splitMarkdownTableRow(line: string) {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim())
+}
+
+function renderMarkdownTable(lines: string[], isDark: boolean) {
+  const borderClass = isDark ? 'border-gray-500' : 'border-gray-300'
+  const headerClass = isDark ? 'bg-slate-600' : 'bg-gray-200'
+  const rows = lines.map(splitMarkdownTableRow)
+  const header = rows[0] ?? []
+  const body = rows.slice(2)
+
+  const headerCells = header
+    .map((cell) => `<th class="border ${borderClass} ${headerClass} px-2 py-1.5 text-left font-semibold">${renderInlineMarkdown(cell, isDark)}</th>`)
+    .join('')
+  const bodyRows = body
+    .map((row) => `<tr>${header.map((_, index) => `<td class="border ${borderClass} px-2 py-1.5 align-top">${renderInlineMarkdown(row[index] ?? '', isDark)}</td>`).join('')}</tr>`)
+    .join('')
+
+  return `<div class="my-2.5 overflow-x-auto"><table class="w-full min-w-[360px] border-collapse text-[13px] leading-snug"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`
+}
+
+function renderMarkdownList(lines: string[], tagName: 'ul' | 'ol', isDark: boolean) {
+  const listClass = tagName === 'ol' ? 'list-decimal' : 'list-disc'
+  const items = lines
+    .map((line) => {
+      const content = line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
+      return `<li class="mb-1 pl-0.5">${renderInlineMarkdown(content, isDark)}</li>`
+    })
+    .join('')
+
+  return `<${tagName} class="my-2 ml-5 ${listClass} p-0">${items}</${tagName}>`
+}
+
+function isMarkdownBlockStart(lines: string[], index: number) {
+  const line = lines[index]
+  return !line.trim() ||
+    /^@@ODW_CODE_BLOCK_\d+@@$/.test(line.trim()) ||
+    /^(#{1,4})\s+/.test(line) ||
+    /^\s*[-*+]\s+/.test(line) ||
+    /^\s*\d+[.)]\s+/.test(line) ||
+    isMarkdownTableStart(lines, index)
+}
+
+function renderMarkdown(content: string, isDark: boolean) {
+  const fencedCodeBlocks: string[] = []
+  const normalizedContent = content
+    .replace(/\r\n?/g, '\n')
+    .replace(/```([^\n`]*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+      const index = fencedCodeBlocks.length
+      const language = lang?.trim()
+      const languageLabel = language
+        ? `<div class="mb-1.5 text-xs text-slate-400">${escapeMarkdownHtml(language)}</div>`
+        : ''
+      fencedCodeBlocks.push(
+        `<pre class="my-2.5 overflow-x-auto whitespace-pre rounded-lg bg-slate-900 p-3 text-xs leading-relaxed text-slate-100"><code>${languageLabel}${escapeMarkdownHtml(code.replace(/\n$/, ''))}</code></pre>`
+      )
+      return `\n\n@@ODW_CODE_BLOCK_${index}@@\n\n`
+    })
+
+  const lines = normalizedContent.split('\n')
+  const output: string[] = []
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!trimmed) continue
+
+    const codeMatch = trimmed.match(/^@@ODW_CODE_BLOCK_(\d+)@@$/)
+    if (codeMatch) {
+      output.push(fencedCodeBlocks[Number(codeMatch[1])] ?? '')
+      continue
+    }
+
+    if (isMarkdownTableStart(lines, i)) {
+      const tableLines = [lines[i], lines[i + 1]]
+      i += 2
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
+        tableLines.push(lines[i])
+        i++
+      }
+      i--
+      output.push(renderMarkdownTable(tableLines, isDark))
+      continue
+    }
+
+    const headingMatch = line.match(/^(#{1,4})\s+(.+)$/)
+    if (headingMatch) {
+      const level = Math.min(headingMatch[1].length, 4)
+      const sizeClass = level === 1 ? 'text-lg' : level === 2 ? 'text-base' : 'text-[15px]'
+      output.push(`<h${level} class="mb-2 mt-3 ${sizeClass} font-bold leading-snug">${renderInlineMarkdown(headingMatch[2], isDark)}</h${level}>`)
+      continue
+    }
+
+    if (/^\s*[-*+]\s+/.test(line) || /^\s*\d+[.)]\s+/.test(line)) {
+      const ordered = /^\s*\d+[.)]\s+/.test(line)
+      const listLines = [line]
+      while (i + 1 < lines.length && (ordered ? /^\s*\d+[.)]\s+/.test(lines[i + 1]) : /^\s*[-*+]\s+/.test(lines[i + 1]))) {
+        listLines.push(lines[++i])
+      }
+      output.push(renderMarkdownList(listLines, ordered ? 'ol' : 'ul', isDark))
+      continue
+    }
+
+    const paragraph = [line]
+    while (i + 1 < lines.length && !isMarkdownBlockStart(lines, i + 1)) {
+      paragraph.push(lines[++i])
+    }
+    output.push(`<p class="mb-2.5 last:mb-0">${paragraph.map((part) => renderInlineMarkdown(part, isDark)).join('<br>')}</p>`)
+  }
+
+  return output.join('')
+}
+
 /**
- * 消息内容组件 - 简单的Markdown渲染
+ * 消息内容组件 - Markdown渲染
  */
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
+  const processedContent = React.useMemo(() => renderMarkdown(content, isDark), [content, isDark])
+
   if (!content) return null
 
-  // 简单的Markdown处理
-  const processedContent = React.useMemo(() => {
-    let html = content
-      // 转义HTML
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      // 代码块
-      .replace(/```(\w*)\n([\s\S]*?)```/g, (_, _lang, code) => 
-        `<pre class="my-2 p-3 rounded-md text-xs overflow-x-auto ${isDark ? 'bg-gray-800' : 'bg-gray-800 text-gray-100'}"><code>${code}</code></pre>`
-      )
-      // 行内代码
-      .replace(/`([^`]+)`/g, `<code class="px-1.5 py-0.5 rounded text-xs ${isDark ? 'bg-gray-600' : 'bg-gray-200'}">$1</code>`)
-      // 粗体
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      // 斜体
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      // 链接
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-indigo-400 underline">$1</a>')
-      // 换行
-      .replace(/\n/g, '<br>')
-
-    return html
-  }, [content, isDark])
-
   return (
-    <div 
-      className="prose prose-sm max-w-none"
-      dangerouslySetInnerHTML={{ __html: processedContent }} 
+    <div
+      className="max-w-none"
+      dangerouslySetInnerHTML={{ __html: processedContent }}
     />
   )
 }
