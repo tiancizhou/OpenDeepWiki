@@ -30,7 +30,6 @@ public class ChatLog : AggregateRoot<Guid>
     /// <summary>
     /// AI回复摘要
     /// </summary>
-    [StringLength(500)]
     public string? AnswerSummary { get; set; }
 
     /// <summary>

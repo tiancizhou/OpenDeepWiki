@@ -612,7 +612,7 @@ public static class DbInitializer
                 ""AppId"" VARCHAR(64) NOT NULL,
                 ""UserIdentifier"" VARCHAR(100),
                 ""Question"" TEXT NOT NULL,
-                ""AnswerSummary"" VARCHAR(500),
+                ""AnswerSummary"" TEXT,
                 ""InputTokens"" INTEGER NOT NULL DEFAULT 0,
                 ""OutputTokens"" INTEGER NOT NULL DEFAULT 0,
                 ""ModelUsed"" VARCHAR(100),
@@ -635,6 +635,7 @@ public static class DbInitializer
             ALTER TABLE ""BranchLanguages"" ADD COLUMN IF NOT EXISTS ""SkillGeneratedAt"" TIMESTAMP WITH TIME ZONE;
             ALTER TABLE ""BranchLanguages"" ADD COLUMN IF NOT EXISTS ""SkillMarkdown"" TEXT;
             ALTER TABLE ""ModelConfigs"" ADD COLUMN IF NOT EXISTS ""AiProviderId"" TEXT;
+            ALTER TABLE ""ChatLogs"" ALTER COLUMN ""AnswerSummary"" TYPE TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""AiProviderId"" TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""SystemPrompt"" TEXT;
             ALTER TABLE ""ChatApps"" ALTER COLUMN ""Description"" TYPE TEXT;
