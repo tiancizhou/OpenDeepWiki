@@ -519,6 +519,10 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         {
             MergeJsonObject(body, bodyParams);
         }
+        else if (!enabled.Value && forceDisableThinking)
+        {
+            ApplyFallbackDisabledThinkingConfig(body, config);
+        }
 
         if (enabled.Value && config["forceTemperature"] is JsonValue forceTemperature)
         {
@@ -1039,6 +1043,23 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         {
             target[pair.Key] = pair.Value?.DeepClone();
         }
+    }
+
+    private static void ApplyFallbackDisabledThinkingConfig(JsonObject body, JsonObject thinkingConfig)
+    {
+        if (thinkingConfig["bodyParams"] is JsonObject enabledBodyParams)
+        {
+            foreach (var pair in enabledBodyParams)
+            {
+                if (pair.Value is JsonValue value &&
+                    value.TryGetValue<bool>(out _))
+                {
+                    body[pair.Key] = false;
+                }
+            }
+        }
+
+        body["enable_thinking"] = false;
     }
 
     private static bool TryReadBoolean(
