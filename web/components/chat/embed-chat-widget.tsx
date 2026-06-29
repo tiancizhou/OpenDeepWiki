@@ -105,8 +105,6 @@ function AssistantAvatar() {
         <path d="M36 50c2.4 2 5.6 2 8 0" stroke="#0f766e" strokeWidth="2.4" strokeLinecap="round" />
         <path d="M22 41h-3.5A4.5 4.5 0 0 1 14 36.5v-2A4.5 4.5 0 0 1 18.5 30H22" stroke="white" strokeWidth="5" strokeLinecap="round" />
         <path d="M58 41h3.5A4.5 4.5 0 0 0 66 36.5v-2A4.5 4.5 0 0 0 61.5 30H58" stroke="white" strokeWidth="5" strokeLinecap="round" />
-        <path d="M55 50c6 0 9 3 9 7s-3 7-9 7" stroke="white" strokeWidth="4" strokeLinecap="round" />
-        <path d="M58 63l4 4 8-9" stroke="#34d399" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
         <circle cx="58" cy="21" r="8" fill="#fbbf24" />
         <path d="M55 21h6M58 18v6" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
       </svg>
@@ -542,36 +540,36 @@ export function EmbedChatWidget({
       `}</style>
 
       {/* 悬浮球 */}
-      <button
-        type="button"
-        onClick={handleToggle}
-        className={cn(
-          "fixed z-[99999] flex items-center justify-center overflow-visible",
-          "h-[72px] w-[72px] rounded-full",
-          "bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600",
-          "text-white shadow-[0_16px_34px_rgba(37,99,235,0.34),0_4px_12px_rgba(15,23,42,0.18)]",
-          "transition-all duration-200 ease-in-out",
-          "hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_20px_42px_rgba(37,99,235,0.42),0_8px_18px_rgba(15,23,42,0.22)]",
-          "active:scale-95",
-          "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
-          !isOpen && "before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-blue-600/30 before:content-[''] before:animate-[odw-assistant-pulse_2.2s_ease-out_infinite]",
-          getPositionClasses()
-        )}
-        aria-label={isOpen ? t("panel.close") : t("assistant.title")}
-        aria-expanded={isOpen}
-      >
-        {isOpen ? (
-          <X className="h-6 w-6" />
-        ) : iconUrl ? (
-          <img
-            src={iconUrl}
-            alt={t("assistant.title")}
-            className="h-12 w-12 rounded-full object-cover"
-          />
-        ) : (
-          <AssistantAvatar />
-        )}
-      </button>
+      {!isOpen && (
+        <button
+          type="button"
+          onClick={handleToggle}
+          className={cn(
+            "fixed z-[99999] flex items-center justify-center overflow-hidden",
+            "h-[72px] w-[72px] rounded-full",
+            "bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600",
+            "text-white shadow-[0_16px_34px_rgba(37,99,235,0.34),0_4px_12px_rgba(15,23,42,0.18)]",
+            "transition-all duration-200 ease-in-out",
+            "hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_20px_42px_rgba(37,99,235,0.42),0_8px_18px_rgba(15,23,42,0.22)]",
+            "active:scale-95",
+            "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+            "before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-blue-600/30 before:content-[''] before:animate-[odw-assistant-pulse_2.2s_ease-out_infinite]",
+            getPositionClasses()
+          )}
+          aria-label={t("assistant.title")}
+          aria-expanded={false}
+        >
+          {iconUrl ? (
+            <img
+              src={iconUrl}
+              alt={t("assistant.title")}
+              className="h-12 w-12 rounded-full object-cover"
+            />
+          ) : (
+            <AssistantAvatar />
+          )}
+        </button>
+      )}
 
       {/* 对话面板 */}
       {isOpen && (

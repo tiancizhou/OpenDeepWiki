@@ -92,7 +92,7 @@
       'box-shadow: 0 16px 34px rgba(37, 99, 235, 0.34), 0 4px 12px rgba(15, 23, 42, 0.18)',
       'transition: transform 0.2s ease, box-shadow 0.2s ease',
       'outline: none',
-      'overflow: visible',
+      'overflow: hidden',
       'right: 24px',
       'bottom: 24px',
       'z-index: 999999'
@@ -232,8 +232,6 @@
       '<path d="M36 50c2.4 2 5.6 2 8 0" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round"/>',
       '<path d="M22 41h-3.5A4.5 4.5 0 0 1 14 36.5v-2A4.5 4.5 0 0 1 18.5 30H22" stroke="white" stroke-width="5" stroke-linecap="round"/>',
       '<path d="M58 41h3.5A4.5 4.5 0 0 0 66 36.5v-2A4.5 4.5 0 0 0 61.5 30H58" stroke="white" stroke-width="5" stroke-linecap="round"/>',
-      '<path d="M55 50c6 0 9 3 9 7s-3 7-9 7" stroke="white" stroke-width="4" stroke-linecap="round"/>',
-      '<path d="M58 63l4 4 8-9" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
       '<circle cx="58" cy="21" r="8" fill="#fbbf24"/>',
       '<path d="M55 21h6M58 18v6" stroke="white" stroke-width="2.2" stroke-linecap="round"/>',
       '</svg>',
@@ -487,9 +485,11 @@
         togglePanel();
       },
       onMouseenter: function() {
+        if (state.isOpen) return;
         this.style.cssText = ballStyle + ';' + styles.floatingBallHover;
       },
       onMouseleave: function() {
+        if (state.isOpen) return;
         this.style.cssText = ballStyle;
       }
     }, iconContent);
