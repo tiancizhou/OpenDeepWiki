@@ -297,7 +297,7 @@ export default function AppDetailPage() {
             </div>
 
             {/* Configuration Summary */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t">
               <div>
                 <p className="text-sm text-muted-foreground">
                   {t("apps.form.providerType")}
@@ -319,6 +319,21 @@ export default function AppDetailPage() {
                     ? t("apps.card.active")
                     : t("apps.card.inactive")}
                 </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">
+                  {t("apps.form.knowledgeBase")}
+                </p>
+                <p className="font-medium truncate">
+                  {app.knowledgeOwner && app.knowledgeRepo
+                    ? `${app.knowledgeOwner}/${app.knowledgeRepo}`
+                    : "-"}
+                </p>
+                {app.knowledgeBranch && app.knowledgeLanguage && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    {app.knowledgeBranch} / {app.knowledgeLanguage}
+                  </p>
+                )}
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">

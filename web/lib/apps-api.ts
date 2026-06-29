@@ -25,6 +25,10 @@ export interface CreateChatAppDto {
   availableModels?: string[]
   defaultModel?: string
   rateLimitPerMinute?: number
+  knowledgeOwner?: string
+  knowledgeRepo?: string
+  knowledgeBranch?: string
+  knowledgeLanguage?: string
 }
 
 /**
@@ -44,6 +48,10 @@ export interface UpdateChatAppDto {
   defaultModel?: string
   rateLimitPerMinute?: number
   isActive?: boolean
+  knowledgeOwner?: string
+  knowledgeRepo?: string
+  knowledgeBranch?: string
+  knowledgeLanguage?: string
 }
 
 /**
@@ -67,8 +75,22 @@ export interface ChatAppDto {
   defaultModel?: string
   rateLimitPerMinute?: number
   isActive: boolean
+  knowledgeOwner?: string
+  knowledgeRepo?: string
+  knowledgeBranch?: string
+  knowledgeLanguage?: string
   createdAt: string
   updatedAt?: string
+}
+
+export interface AppKnowledgeOption {
+  repositoryId: string
+  owner: string
+  repo: string
+  branch: string
+  language: string
+  isDefaultLanguage: boolean
+  displayName: string
 }
 
 // ==================== 统计相关类型 ====================
@@ -201,6 +223,10 @@ export async function getAppAiProviders(): Promise<AppAiProvider[]> {
 
 export async function getAppAiModels(providerId: string): Promise<AppAiModel[]> {
   return api.get<AppAiModel[]>(`/api/v1/apps/ai-providers/${providerId}/models`)
+}
+
+export async function getAppKnowledgeOptions(): Promise<AppKnowledgeOption[]> {
+  return api.get<AppKnowledgeOption[]>('/api/v1/apps/knowledge-options')
 }
 
 // ==================== 统计 API ====================

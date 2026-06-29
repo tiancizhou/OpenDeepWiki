@@ -70,6 +70,30 @@ public class ChatApp : AggregateRoot<Guid>
     public string? AiProviderId { get; set; }
 
     /// <summary>
+    /// Bound repository owner for embedded knowledge-base chat.
+    /// </summary>
+    [StringLength(100)]
+    public string? KnowledgeOwner { get; set; }
+
+    /// <summary>
+    /// Bound repository name for embedded knowledge-base chat.
+    /// </summary>
+    [StringLength(100)]
+    public string? KnowledgeRepo { get; set; }
+
+    /// <summary>
+    /// Bound repository branch for embedded knowledge-base chat.
+    /// </summary>
+    [StringLength(200)]
+    public string? KnowledgeBranch { get; set; }
+
+    /// <summary>
+    /// Bound document language for embedded knowledge-base chat.
+    /// </summary>
+    [StringLength(50)]
+    public string? KnowledgeLanguage { get; set; }
+
+    /// <summary>
     /// API密钥
     /// </summary>
     [StringLength(500)]

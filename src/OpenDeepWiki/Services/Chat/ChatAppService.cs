@@ -24,6 +24,10 @@ public class CreateChatAppDto
     public List<string>? AvailableModels { get; set; }
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
+    public string? KnowledgeOwner { get; set; }
+    public string? KnowledgeRepo { get; set; }
+    public string? KnowledgeBranch { get; set; }
+    public string? KnowledgeLanguage { get; set; }
 }
 
 /// <summary>
@@ -44,6 +48,10 @@ public class UpdateChatAppDto
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
     public bool? IsActive { get; set; }
+    public string? KnowledgeOwner { get; set; }
+    public string? KnowledgeRepo { get; set; }
+    public string? KnowledgeBranch { get; set; }
+    public string? KnowledgeLanguage { get; set; }
 }
 
 
@@ -69,6 +77,10 @@ public class ChatAppDto
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
     public bool IsActive { get; set; }
+    public string? KnowledgeOwner { get; set; }
+    public string? KnowledgeRepo { get; set; }
+    public string? KnowledgeBranch { get; set; }
+    public string? KnowledgeLanguage { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -168,6 +180,10 @@ public class ChatAppService : IChatAppService
             AvailableModels = dto.AvailableModels != null ? JsonSerializer.Serialize(dto.AvailableModels) : null,
             DefaultModel = dto.DefaultModel,
             RateLimitPerMinute = dto.RateLimitPerMinute,
+            KnowledgeOwner = NormalizeOptional(dto.KnowledgeOwner),
+            KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo),
+            KnowledgeBranch = NormalizeOptional(dto.KnowledgeBranch),
+            KnowledgeLanguage = NormalizeOptional(dto.KnowledgeLanguage),
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -244,6 +260,7 @@ public class ChatAppService : IChatAppService
         if (dto.AvailableModels != null) app.AvailableModels = JsonSerializer.Serialize(dto.AvailableModels);
         if (dto.DefaultModel != null) app.DefaultModel = dto.DefaultModel;
         if (dto.RateLimitPerMinute.HasValue) app.RateLimitPerMinute = dto.RateLimitPerMinute;
+        ApplyKnowledgeBinding(app, dto);
         if (dto.IsActive.HasValue) app.IsActive = dto.IsActive.Value;
 
         app.UpdatedAt = DateTime.UtcNow;
@@ -399,9 +416,34 @@ public class ChatAppService : IChatAppService
             DefaultModel = app.DefaultModel,
             RateLimitPerMinute = app.RateLimitPerMinute,
             IsActive = app.IsActive,
+            KnowledgeOwner = app.KnowledgeOwner,
+            KnowledgeRepo = app.KnowledgeRepo,
+            KnowledgeBranch = app.KnowledgeBranch,
+            KnowledgeLanguage = app.KnowledgeLanguage,
             CreatedAt = app.CreatedAt,
             UpdatedAt = app.UpdatedAt
         };
+    }
+
+    private static void ApplyKnowledgeBinding(ChatApp app, UpdateChatAppDto dto)
+    {
+        if (dto.KnowledgeOwner == null &&
+            dto.KnowledgeRepo == null &&
+            dto.KnowledgeBranch == null &&
+            dto.KnowledgeLanguage == null)
+        {
+            return;
+        }
+
+        app.KnowledgeOwner = NormalizeOptional(dto.KnowledgeOwner);
+        app.KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo);
+        app.KnowledgeBranch = NormalizeOptional(dto.KnowledgeBranch);
+        app.KnowledgeLanguage = NormalizeOptional(dto.KnowledgeLanguage);
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     /// <summary>

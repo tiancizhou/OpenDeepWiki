@@ -1,9 +1,12 @@
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
+using Microsoft.EntityFrameworkCore;
+using OpenDeepWiki.EFCore;
 using OpenDeepWiki.Services.Chat;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Xunit;
 
 namespace OpenDeepWiki.Tests.Services.Chat;
 
@@ -15,6 +18,15 @@ namespace OpenDeepWiki.Tests.Services.Chat;
 public class ChatAppServicePropertyTests
 {
     private static readonly ILogger<ChatAppService> NullLogger = NullLogger<ChatAppService>.Instance;
+
+    private static ChatAppServiceTestDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<ChatAppServiceTestDbContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+
+        return new ChatAppServiceTestDbContext(options);
+    }
 
     /// <summary>
     /// Property 7: AppId唯一性 - 生成的AppId应该是全局唯一的
@@ -166,5 +178,71 @@ public class ChatAppServicePropertyTests
                 // AppId and AppSecret should be different
                 return appId != secret;
             });
+    }
+
+    [Fact]
+    public async Task CreateAppAsync_ShouldPersistKnowledgeBinding()
+    {
+        using var context = CreateContext();
+        var service = new ChatAppService(context, NullLogger);
+
+        var app = await service.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "Docs Bot",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test",
+            AvailableModels = new List<string> { "gpt-4o-mini" },
+            DefaultModel = "gpt-4o-mini",
+            KnowledgeOwner = "AIDotNet",
+            KnowledgeRepo = "OpenDeepWiki",
+            KnowledgeBranch = "main",
+            KnowledgeLanguage = "zh"
+        });
+
+        Assert.Equal("AIDotNet", app.KnowledgeOwner);
+        Assert.Equal("OpenDeepWiki", app.KnowledgeRepo);
+        Assert.Equal("main", app.KnowledgeBranch);
+        Assert.Equal("zh", app.KnowledgeLanguage);
+    }
+
+    [Fact]
+    public async Task UpdateAppAsync_ShouldClearKnowledgeBinding()
+    {
+        using var context = CreateContext();
+        var service = new ChatAppService(context, NullLogger);
+
+        var app = await service.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "Docs Bot",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test",
+            AvailableModels = new List<string> { "gpt-4o-mini" },
+            DefaultModel = "gpt-4o-mini",
+            KnowledgeOwner = "AIDotNet",
+            KnowledgeRepo = "OpenDeepWiki",
+            KnowledgeBranch = "main",
+            KnowledgeLanguage = "zh"
+        });
+
+        var updated = await service.UpdateAppAsync(app.Id, "user1", new UpdateChatAppDto
+        {
+            KnowledgeOwner = string.Empty,
+            KnowledgeRepo = string.Empty,
+            KnowledgeBranch = string.Empty,
+            KnowledgeLanguage = string.Empty
+        });
+
+        Assert.NotNull(updated);
+        Assert.Null(updated.KnowledgeOwner);
+        Assert.Null(updated.KnowledgeRepo);
+        Assert.Null(updated.KnowledgeBranch);
+        Assert.Null(updated.KnowledgeLanguage);
+    }
+}
+
+public class ChatAppServiceTestDbContext : MasterDbContext
+{
+    public ChatAppServiceTestDbContext(DbContextOptions options) : base(options)
+    {
     }
 }

@@ -334,27 +334,29 @@ public class EmbedService : IEmbedService
             modelId = app.AvailableModels.FirstOrDefault() ?? "gpt-4o-mini";
         }
 
+        var knowledgeContext = ResolveKnowledgeContext(request, app);
+
         // Calculate repository path from Owner/Repo
         GitTool? gitTool = null;
         var tools = new List<AITool>();
 
-        if (!string.IsNullOrWhiteSpace(request.Owner) && !string.IsNullOrWhiteSpace(request.Repo))
+        if (knowledgeContext.HasRepository)
         {
-            var repositoryPath = GetRepositoryPath(request.Owner, request.Repo);
+            var repositoryPath = GetRepositoryPath(knowledgeContext.Owner!, knowledgeContext.Repo!);
             if (Directory.Exists(repositoryPath))
             {
                 try
                 {
                     // Checkout to the specified branch before initializing GitTool
-                    if (!string.IsNullOrWhiteSpace(request.Branch))
+                    if (!string.IsNullOrWhiteSpace(knowledgeContext.Branch))
                     {
-                        CheckoutBranch(repositoryPath, request.Branch);
+                        CheckoutBranch(repositoryPath, knowledgeContext.Branch);
                     }
                     
                     gitTool = new GitTool(repositoryPath);
                     tools.AddRange(gitTool.GetTools());
                     _logger.LogInformation("GitTool initialized for app {AppId} with repository {Owner}/{Repo}@{Branch}",
-                        request.AppId, request.Owner, request.Repo, request.Branch);
+                        request.AppId, knowledgeContext.Owner, knowledgeContext.Repo, knowledgeContext.Branch);
                 }
                 catch (Exception ex)
                 {
@@ -367,12 +369,27 @@ public class EmbedService : IEmbedService
             }
         }
 
+        if (knowledgeContext.HasRepository && !string.IsNullOrWhiteSpace(knowledgeContext.Branch) &&
+            !string.IsNullOrWhiteSpace(knowledgeContext.Language))
+        {
+            var chatDocReaderTool = await ChatDocReaderTool.CreateAsync(
+                _context,
+                knowledgeContext.Owner!,
+                knowledgeContext.Repo!,
+                knowledgeContext.Branch!,
+                knowledgeContext.Language!,
+                cancellationToken);
+            tools.Add(chatDocReaderTool.GetTool());
+        }
+
         // Build enhanced system prompt with repository context
         var systemPrompt = BuildEnhancedSystemPrompt(
             app.Name,
             app.Description,
-            request.Owner,
-            request.Repo,
+            knowledgeContext.Owner,
+            knowledgeContext.Repo,
+            knowledgeContext.Branch,
+            knowledgeContext.Language,
             gitTool != null);
 
         // Create agent with app's AI configuration
@@ -390,8 +407,9 @@ public class EmbedService : IEmbedService
         {
             BusinessTag = "embed_chat",
             Description = "嵌入式聊天",
-            Repository = BuildRepositoryLabel(request.Owner, request.Repo),
-            Branch = request.Branch,
+            Repository = BuildRepositoryLabel(knowledgeContext.Owner, knowledgeContext.Repo),
+            Branch = knowledgeContext.Branch,
+            Language = knowledgeContext.Language,
             AppId = request.AppId,
             UserId = request.UserIdentifier,
             ModelId = resolvedModel.ModelId
@@ -456,8 +474,8 @@ public class EmbedService : IEmbedService
             cachedInputTokens,
             cacheCreationInputTokens,
             resolvedModel,
-            request.Owner,
-            request.Repo,
+            knowledgeContext.Owner,
+            knowledgeContext.Repo,
             cancellationToken);
 
         // Record chat log
@@ -598,6 +616,21 @@ public class EmbedService : IEmbedService
         return false;
     }
 
+    private static EmbedKnowledgeContext ResolveKnowledgeContext(EmbedChatRequest request, ChatAppDto app)
+    {
+        var owner = NormalizeOptional(request.Owner) ?? NormalizeOptional(app.KnowledgeOwner);
+        var repo = NormalizeOptional(request.Repo) ?? NormalizeOptional(app.KnowledgeRepo);
+        var branch = NormalizeOptional(request.Branch) ?? NormalizeOptional(app.KnowledgeBranch);
+        var language = NormalizeOptional(app.KnowledgeLanguage);
+
+        return new EmbedKnowledgeContext(owner, repo, branch, language);
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
     /// <summary>
     /// Builds chat messages from DTOs.
     /// </summary>
@@ -664,6 +697,8 @@ public class EmbedService : IEmbedService
         string? appDescription,
         string? owner,
         string? repo,
+        string? branch,
+        string? language,
         bool hasCodeAccess)
     {
         var sb = new StringBuilder();
@@ -681,8 +716,19 @@ public class EmbedService : IEmbedService
 
         // Capabilities Section
         sb.AppendLine("<capabilities>");
+        if (!string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
+        {
+            sb.AppendLine("You have access to repository documentation through:");
+            sb.AppendLine("- ReadDoc: Read generated wiki documentation content from the repository catalog");
+            sb.AppendLine("  IMPORTANT: ReadDoc returns a 'sourceFiles' field containing source files used to generate the document.");
+            sb.AppendLine("  Use those paths with ReadFile when implementation details are needed.");
+        }
         if (hasCodeAccess)
         {
+            if (!string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
+            {
+                sb.AppendLine();
+            }
             sb.AppendLine("You have access to the following tools for code analysis:");
             sb.AppendLine("- ReadFile: Read source code files with line numbers");
             sb.AppendLine("- ListFiles: Discover project structure and files");
@@ -691,7 +737,7 @@ public class EmbedService : IEmbedService
             sb.AppendLine("Use these tools proactively to gather context before answering.");
             sb.AppendLine("NEVER guess about code - always verify with actual source files.");
         }
-        else
+        else if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
         {
             sb.AppendLine("You provide expert guidance on software development topics.");
         }
@@ -802,6 +848,14 @@ public class EmbedService : IEmbedService
         {
             sb.AppendLine($"Repository: {owner}/{repo}");
         }
+        if (!string.IsNullOrWhiteSpace(branch))
+        {
+            sb.AppendLine($"Branch: {branch}");
+        }
+        if (!string.IsNullOrWhiteSpace(language))
+        {
+            sb.AppendLine($"Document Language: {language}");
+        }
         if (!string.IsNullOrWhiteSpace(appDescription))
         {
             sb.AppendLine($"Description: {appDescription}");
@@ -887,4 +941,13 @@ public class EmbedService : IEmbedService
                 branchName, repositoryPath);
         }
     }
+}
+
+internal sealed record EmbedKnowledgeContext(
+    string? Owner,
+    string? Repo,
+    string? Branch,
+    string? Language)
+{
+    public bool HasRepository => !string.IsNullOrWhiteSpace(Owner) && !string.IsNullOrWhiteSpace(Repo);
 }

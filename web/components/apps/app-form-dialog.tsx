@@ -29,8 +29,10 @@ import {
   UpdateChatAppDto,
   AppAiModel,
   AppAiProvider,
+  AppKnowledgeOption,
   getAppAiModels,
   getAppAiProviders,
+  getAppKnowledgeOptions,
 } from "@/lib/apps-api";
 
 interface AppFormDialogProps {
@@ -63,6 +65,10 @@ export function AppFormDialog({
   const [defaultModel, setDefaultModel] = useState("");
   const [rateLimitPerMinute, setRateLimitPerMinute] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [knowledgeOptions, setKnowledgeOptions] = useState<AppKnowledgeOption[]>([]);
+  const [knowledgeRepository, setKnowledgeRepository] = useState("_none");
+  const [knowledgeBranch, setKnowledgeBranch] = useState("");
+  const [knowledgeLanguage, setKnowledgeLanguage] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -77,6 +83,13 @@ export function AppFormDialog({
       setDefaultModel(app.defaultModel || "");
       setRateLimitPerMinute(app.rateLimitPerMinute?.toString() || "");
       setIsActive(app.isActive);
+      setKnowledgeRepository(
+        app.knowledgeOwner && app.knowledgeRepo
+          ? `${app.knowledgeOwner}/${app.knowledgeRepo}`
+          : "_none"
+      );
+      setKnowledgeBranch(app.knowledgeBranch || "");
+      setKnowledgeLanguage(app.knowledgeLanguage || "");
     } else {
       setName("");
       setDescription("");
@@ -87,6 +100,9 @@ export function AppFormDialog({
       setDefaultModel("");
       setRateLimitPerMinute("");
       setIsActive(true);
+      setKnowledgeRepository("_none");
+      setKnowledgeBranch("");
+      setKnowledgeLanguage("");
     }
 
     setError(null);
@@ -102,7 +118,14 @@ export function AppFormDialog({
         setAiProviders(providers);
         setAiProviderId((current) => current || app?.aiProviderId || providers[0]?.id || "");
       })
-      .catch(() => setError("Failed to load AI providers"));
+      .catch(() => setError(t("apps.form.loadAiProvidersFailed")));
+
+    getAppKnowledgeOptions()
+      .then((options) => {
+        if (!isMounted) return;
+        setKnowledgeOptions(options);
+      })
+      .catch(() => setError(t("apps.form.loadKnowledgeOptionsFailed")));
 
     return () => {
       isMounted = false;
@@ -128,12 +151,56 @@ export function AppFormDialog({
             : models.find((model) => model.isDefault)?.modelId || models[0]?.modelId || ""
         );
       })
-      .catch(() => setError("Failed to load AI models"));
+      .catch(() => setError(t("apps.form.loadAiModelsFailed")));
 
     return () => {
       isMounted = false;
     };
   }, [aiProviderId]);
+
+  useEffect(() => {
+    if (knowledgeRepository === "_none") {
+      setKnowledgeBranch("");
+      setKnowledgeLanguage("");
+      return;
+    }
+
+    const options = knowledgeOptions.filter(
+      (option) => `${option.owner}/${option.repo}` === knowledgeRepository
+    );
+    if (options.length === 0) {
+      return;
+    }
+
+    setKnowledgeBranch((current) =>
+      current && options.some((option) => option.branch === current)
+        ? current
+        : options[0].branch
+    );
+  }, [knowledgeOptions, knowledgeRepository]);
+
+  useEffect(() => {
+    if (knowledgeRepository === "_none" || !knowledgeBranch) {
+      setKnowledgeLanguage("");
+      return;
+    }
+
+    const options = knowledgeOptions.filter(
+      (option) =>
+        `${option.owner}/${option.repo}` === knowledgeRepository &&
+        option.branch === knowledgeBranch
+    );
+    if (options.length === 0) {
+      return;
+    }
+
+    setKnowledgeLanguage((current) =>
+      current && options.some((option) => option.language === current)
+        ? current
+        : options.find((option) => option.isDefaultLanguage)?.language ||
+          options[0].language
+    );
+  }, [knowledgeBranch, knowledgeOptions, knowledgeRepository]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,12 +211,12 @@ export function AppFormDialog({
     }
 
     if (!aiProviderId) {
-      setError("Please select an AI provider");
+      setError(t("apps.form.aiProviderRequired"));
       return;
     }
 
     if (!defaultModel.trim()) {
-      setError("Please select a default model");
+      setError(t("apps.form.defaultModelRequired"));
       return;
     }
 
@@ -163,6 +230,26 @@ export function AppFormDialog({
         .filter(Boolean);
       const modelsArray = aiModels.map((model) => model.modelId);
       const selectedProvider = aiProviders.find((provider) => provider.id === aiProviderId);
+      const selectedKnowledge = knowledgeOptions.find(
+        (option) =>
+          `${option.owner}/${option.repo}` === knowledgeRepository &&
+          option.branch === knowledgeBranch &&
+          option.language === knowledgeLanguage
+      );
+      const knowledgeBinding =
+        knowledgeRepository !== "_none" && selectedKnowledge
+          ? {
+              knowledgeOwner: selectedKnowledge.owner,
+              knowledgeRepo: selectedKnowledge.repo,
+              knowledgeBranch: selectedKnowledge.branch,
+              knowledgeLanguage: selectedKnowledge.language,
+            }
+          : {
+              knowledgeOwner: "",
+              knowledgeRepo: "",
+              knowledgeBranch: "",
+              knowledgeLanguage: "",
+            };
 
       if (isEditing && app) {
         const updateDto: UpdateChatAppDto = {
@@ -179,6 +266,7 @@ export function AppFormDialog({
             ? parseInt(rateLimitPerMinute, 10)
             : undefined,
           isActive,
+          ...knowledgeBinding,
         };
         await updateApp(app.id, updateDto);
       } else {
@@ -195,6 +283,7 @@ export function AppFormDialog({
           rateLimitPerMinute: rateLimitPerMinute
             ? parseInt(rateLimitPerMinute, 10)
             : undefined,
+          ...knowledgeBinding,
         };
         await createApp(createDto);
       }
@@ -214,6 +303,62 @@ export function AppFormDialog({
   };
 
   const modelOptions = aiModels.map((model) => model.modelId);
+  const currentKnowledgeRepository =
+    app?.knowledgeOwner && app?.knowledgeRepo
+      ? `${app.knowledgeOwner}/${app.knowledgeRepo}`
+      : null;
+  const repositoryOptions = Array.from(
+    new Map(
+      [
+        ...knowledgeOptions.map((option) => [
+          `${option.owner}/${option.repo}`,
+          {
+            value: `${option.owner}/${option.repo}`,
+            label: option.displayName,
+          },
+        ] as const),
+        ...(currentKnowledgeRepository
+          ? [
+              [
+                currentKnowledgeRepository,
+                {
+                  value: currentKnowledgeRepository,
+                  label: currentKnowledgeRepository,
+                },
+              ] as const,
+            ]
+          : []),
+      ]
+    ).values()
+  );
+  const branchOptions = Array.from(
+    new Set(
+      [
+        ...knowledgeOptions
+          .filter((option) => `${option.owner}/${option.repo}` === knowledgeRepository)
+          .map((option) => option.branch),
+        ...(currentKnowledgeRepository === knowledgeRepository && app?.knowledgeBranch
+          ? [app.knowledgeBranch]
+          : []),
+      ]
+    )
+  );
+  const languageOptions = Array.from(
+    new Set([
+      ...knowledgeOptions
+        .filter(
+          (option) =>
+            `${option.owner}/${option.repo}` === knowledgeRepository &&
+            option.branch === knowledgeBranch
+        )
+        .map((option) => option.language),
+      ...(currentKnowledgeRepository === knowledgeRepository &&
+      app?.knowledgeBranch === knowledgeBranch &&
+      app?.knowledgeLanguage
+        ? [app.knowledgeLanguage]
+        : []),
+    ])
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -299,10 +444,10 @@ export function AppFormDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>AI Provider *</Label>
+                <Label>{t("apps.form.aiProvider")} *</Label>
                 <Select value={aiProviderId} onValueChange={setAiProviderId}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select AI provider" />
+                    <SelectValue placeholder={t("apps.form.aiProviderPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
                     {aiProviders.map((provider) => (
@@ -338,7 +483,7 @@ export function AppFormDialog({
             </div>
 
             <p className="text-sm text-muted-foreground">
-              Endpoint and API key are read from the selected provider.
+              {t("apps.form.aiProviderHint")}
             </p>
 
             <div className="grid grid-cols-2 gap-4">
@@ -356,6 +501,79 @@ export function AppFormDialog({
                 />
               </div>
             </div>
+          </div>
+
+          <div className="space-y-4 border-t pt-4">
+            <div className="space-y-1">
+              <h3 className="font-medium">{t("apps.form.knowledgeBase")}</h3>
+              <p className="text-sm text-muted-foreground">
+                {t("apps.form.knowledgeBaseHint")}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("apps.form.repository")}</Label>
+              <Select
+                value={knowledgeRepository}
+                onValueChange={setKnowledgeRepository}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("apps.form.repositoryPlaceholder")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="_none">{t("apps.form.noKnowledgeBase")}</SelectItem>
+                  {repositoryOptions.map((repository) => (
+                    <SelectItem key={repository.value} value={repository.value}>
+                      {repository.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {knowledgeRepository !== "_none" && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{t("apps.form.branch")}</Label>
+                  <Select
+                    value={knowledgeBranch}
+                    onValueChange={setKnowledgeBranch}
+                    disabled={branchOptions.length === 0}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={t("apps.form.branchPlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {branchOptions.map((branch) => (
+                        <SelectItem key={branch} value={branch}>
+                          {branch}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>{t("apps.form.language")}</Label>
+                  <Select
+                    value={knowledgeLanguage}
+                    onValueChange={setKnowledgeLanguage}
+                    disabled={languageOptions.length === 0}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder={t("apps.form.languagePlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {languageOptions.map((language) => (
+                        <SelectItem key={language} value={language}>
+                          {language}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
           </div>
 
           {isEditing && (

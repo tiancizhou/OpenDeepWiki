@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OpenDeepWiki.EFCore;
+using OpenDeepWiki.Entities;
 using OpenDeepWiki.Services.Auth;
 using OpenDeepWiki.Services.Chat;
 
@@ -37,6 +38,9 @@ public static class ChatAppEndpoints
 
         group.MapGet("/ai-providers/{providerId}/models", GetAiModelsAsync)
             .WithName("GetAppAiModels");
+
+        group.MapGet("/knowledge-options", GetKnowledgeOptionsAsync)
+            .WithName("GetAppKnowledgeOptions");
 
         group.MapGet("/{id:guid}", GetAppByIdAsync)
             .WithName("GetAppById")
@@ -154,6 +158,46 @@ public static class ChatAppEndpoints
             .ToListAsync(cancellationToken);
 
         return Results.Ok(models);
+    }
+
+    private static async Task<IResult> GetKnowledgeOptionsAsync(
+        [FromServices] IContext context,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var rows = await (
+                from repository in context.Repositories
+                join branch in context.RepositoryBranches on repository.Id equals branch.RepositoryId
+                join language in context.BranchLanguages on branch.Id equals language.RepositoryBranchId
+                where !repository.IsDeleted
+                      && !branch.IsDeleted
+                      && !language.IsDeleted
+                      && repository.Status == RepositoryStatus.Completed
+                      && (repository.IsPublic || repository.OwnerUserId == userContext.UserId)
+                orderby repository.UpdatedAt ?? repository.CreatedAt descending,
+                    repository.OrgName,
+                    repository.RepoName,
+                    branch.BranchName,
+                    language.IsDefault descending,
+                    language.LanguageCode
+                select new AppKnowledgeOptionDto
+                {
+                    RepositoryId = repository.Id,
+                    Owner = repository.OrgName,
+                    Repo = repository.RepoName,
+                    Branch = branch.BranchName,
+                    Language = language.LanguageCode,
+                    IsDefaultLanguage = language.IsDefault,
+                    DisplayName = repository.OrgName + "/" + repository.RepoName
+                })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(rows);
     }
 
     private static async Task<IResult> GetAppByIdAsync(
@@ -320,4 +364,15 @@ public static class ChatAppEndpoints
         var logs = await chatLogService.GetLogsAsync(query, cancellationToken);
         return Results.Ok(logs);
     }
+}
+
+public class AppKnowledgeOptionDto
+{
+    public string RepositoryId { get; set; } = string.Empty;
+    public string Owner { get; set; } = string.Empty;
+    public string Repo { get; set; } = string.Empty;
+    public string Branch { get; set; } = string.Empty;
+    public string Language { get; set; } = string.Empty;
+    public bool IsDefaultLanguage { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
 }
