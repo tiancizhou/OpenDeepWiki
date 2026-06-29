@@ -79,7 +79,7 @@ services:
 
 - `CHAT_*`、`WIKI_CATALOG_*`、`WIKI_CONTENT_*` 可以共用同一个 provider。
 - 翻译配置是可选的；如果没有设置 `WIKI_TRANSLATION_*`，会回退到内容生成的 provider/model。
-- 默认使用 `Database__Type=sqlite` 和 `ConnectionStrings__Default=Data Source=/data/opendeepwiki.db`。
+- `compose.yaml` 默认会启动 PostgreSQL，并把生成的仓库数据保存在 `opendeepwiki-data` Docker 卷中。
 
 ### 3. 启动服务
 
@@ -106,28 +106,22 @@ make up
 
 正式部署前请务必修改默认 JWT 密钥和管理员密码。
 
-## 使用 PostgreSQL 代替 SQLite
+## 数据库配置
 
 当前运行时代码只支持 `sqlite` 和 `postgresql`。
 
-如果想直接使用仓库自带的 PostgreSQL 编排文件：
-
-```bash
-docker compose -f compose.pgsql.yaml up -d --build
-```
-
-如果使用你自己的 PostgreSQL，可以配置下面任意一组等价变量：
+默认 `compose.yaml` 使用内置 PostgreSQL 服务。如果使用你自己的 PostgreSQL，可以配置下面这组变量：
 
 ```yaml
 - Database__Type=postgresql
 - ConnectionStrings__Default=Host=your-host;Port=5432;Database=opendeepwiki;Username=postgres;Password=secret
 ```
 
-或者：
+非 Docker 本地运行仍可使用 SQLite：
 
 ```yaml
-- DB_TYPE=postgresql
-- CONNECTION_STRING=Host=your-host;Port=5432;Database=opendeepwiki;Username=postgres;Password=secret
+- Database__Type=sqlite
+- ConnectionStrings__Default=Data Source=opendeepwiki.db
 ```
 
 ## 本地开发

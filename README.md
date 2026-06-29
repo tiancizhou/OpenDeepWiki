@@ -79,7 +79,7 @@ Notes:
 
 - `CHAT_*`, `WIKI_CATALOG_*`, and `WIKI_CONTENT_*` can point to the same provider.
 - Translation is optional. If `WIKI_TRANSLATION_*` is not set, translation falls back to the content-generation provider/model.
-- `compose.yaml` uses `Database__Type=sqlite` and `ConnectionStrings__Default=Data Source=/data/opendeepwiki.db` by default.
+- `compose.yaml` starts PostgreSQL by default and stores generated repository data in the `opendeepwiki-data` Docker volume.
 
 ### 3. Start the stack
 
@@ -106,28 +106,22 @@ On a fresh database, the seeded admin account is:
 
 Change the default JWT secret and admin password before any real deployment.
 
-## PostgreSQL Instead Of SQLite
+## Database Configuration
 
 The current runtime code supports `sqlite` and `postgresql`.
 
-To boot the bundled PostgreSQL stack:
-
-```bash
-docker compose -f compose.pgsql.yaml up -d --build
-```
-
-If you prefer your own database, configure either of these equivalent pairs:
+The default `compose.yaml` uses the bundled PostgreSQL service. If you prefer your own database, configure this pair:
 
 ```yaml
 - Database__Type=postgresql
 - ConnectionStrings__Default=Host=your-host;Port=5432;Database=opendeepwiki;Username=postgres;Password=secret
 ```
 
-or
+SQLite is still supported for non-Docker local runs:
 
 ```yaml
-- DB_TYPE=postgresql
-- CONNECTION_STRING=Host=your-host;Port=5432;Database=opendeepwiki;Username=postgres;Password=secret
+- Database__Type=sqlite
+- ConnectionStrings__Default=Data Source=opendeepwiki.db
 ```
 
 ## Local Development
