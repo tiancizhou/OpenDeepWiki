@@ -352,7 +352,7 @@
   }
 
   // SSE流式对话
-  function streamChat(messages, onContent, onDone, onError) {
+  function streamChat(messages, onContent, onDone, onError, onStatus) {
     var url = config.apiBaseUrl + '/api/v1/embed/stream';
     
     var requestBody = {
@@ -380,10 +380,16 @@
       var reader = response.body.getReader();
       var decoder = new TextDecoder();
       var buffer = '';
+      var currentEventType = '';
+      var receivedDone = false;
 
       function processStream() {
         reader.read().then(function(result) {
           if (result.done) {
+            if (!receivedDone) {
+              onError(new Error('响应流已中断，请重试'));
+              return;
+            }
             onDone();
             return;
           }
@@ -398,24 +404,34 @@
 
             // 解析SSE事件
             if (line.startsWith('event: ')) {
-              // 事件类型行，暂存
+              currentEventType = line.substring(7);
               return;
             }
             
             if (line.startsWith('data: ')) {
               var dataStr = line.substring(6);
+              var parsed = null;
               try {
-                var event = JSON.parse(dataStr);
-                if (event.type === 'content') {
-                  onContent(event.data);
-                } else if (event.type === 'done') {
-                  // 完成事件会在流结束时处理
-                } else if (event.type === 'error') {
-                  onError(new Error(event.data.message || '对话失败'));
-                }
+                parsed = JSON.parse(dataStr);
               } catch (e) {
-                // 可能是纯文本内容
-                onContent(dataStr);
+                if (currentEventType === 'content') {
+                  parsed = dataStr;
+                }
+              }
+
+              var eventType = currentEventType || (parsed && parsed.type);
+              if (eventType === 'content') {
+                onContent(typeof parsed === 'string' ? parsed : parsed.data);
+              } else if (eventType === 'thinking') {
+                onStatus('正在思考...');
+              } else if (eventType === 'tool_call') {
+                var toolName = parsed && parsed.name ? parsed.name : '';
+                onStatus(toolName ? '正在查阅资料：' + toolName : '正在查阅资料...');
+              } else if (eventType === 'done') {
+                receivedDone = true;
+              } else if (eventType === 'error') {
+                onError(new Error((parsed && parsed.message) || '对话失败'));
+                return;
               }
             }
           });
@@ -815,6 +831,12 @@
         sendBtn.disabled = false;
         sendBtn.style.opacity = '1';
         input.focus();
+      },
+      function(status) {
+        hideLoading();
+        if (!assistantContent) {
+          updateLastAssistantMessage(status);
+        }
       }
     );
   }

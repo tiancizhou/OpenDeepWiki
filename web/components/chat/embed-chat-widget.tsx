@@ -46,7 +46,7 @@ interface ChatMessage {
  * SSE事件
  */
 interface SSEEvent {
-  type: 'content' | 'tool_call' | 'tool_result' | 'done' | 'error'
+  type: 'content' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error'
   data: unknown
 }
 
@@ -310,6 +310,18 @@ export function EmbedChatWidget({
         const decoder = new TextDecoder()
         let buffer = ''
         let assistantContent = ''
+        let currentEventType = ''
+        let receivedDone = false
+
+        const updateAssistantMessage = (content: string) => {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === assistantMessage.id
+                ? { ...m, content }
+                : m
+            )
+          )
+        }
 
         while (true) {
           const { done, value } = await reader.read()
@@ -321,44 +333,59 @@ export function EmbedChatWidget({
 
           for (const line of lines) {
             const trimmedLine = line.trim()
-            if (!trimmedLine || trimmedLine.startsWith('event:')) continue
+            if (!trimmedLine) continue
+
+            if (trimmedLine.startsWith('event:')) {
+              currentEventType = trimmedLine.substring(6).trim()
+              continue
+            }
 
             if (trimmedLine.startsWith('data: ')) {
               const dataStr = trimmedLine.substring(6)
+              let event: SSEEvent | null = null
               try {
-                const event: SSEEvent = JSON.parse(dataStr)
-                
+                const data = JSON.parse(dataStr)
+                event = {
+                  type: (currentEventType || data.type) as SSEEvent['type'],
+                  data: data.data ?? data,
+                }
+              } catch {
+                if (currentEventType === 'content' && typeof dataStr === 'string' && dataStr.trim()) {
+                  event = {
+                    type: 'content',
+                    data: dataStr,
+                  }
+                }
+              }
+
+              if (event) {
                 if (event.type === 'content') {
                   assistantContent += event.data as string
-                  setMessages(prev => 
-                    prev.map(m => 
-                      m.id === assistantMessage.id 
-                        ? { ...m, content: assistantContent }
-                        : m
-                    )
-                  )
+                  updateAssistantMessage(assistantContent)
+                } else if (event.type === 'thinking') {
+                  if (!assistantContent) {
+                    updateAssistantMessage('正在思考...')
+                  }
+                } else if (event.type === 'tool_call') {
+                  if (!assistantContent) {
+                    const toolCall = event.data as { name?: string }
+                    updateAssistantMessage(toolCall.name ? `正在查阅资料：${toolCall.name}` : '正在查阅资料...')
+                  }
                 } else if (event.type === 'done') {
                   // 对话完成，清除重试信息
+                  receivedDone = true
                   setLastRequest(null)
                 } else if (event.type === 'error') {
                   const errorData = event.data as ErrorInfo
                   throw new Error(errorData.message || 'Chat request failed')
                 }
-              } catch (parseError) {
-                // 可能是纯文本内容
-                if (typeof dataStr === 'string' && dataStr.trim()) {
-                  assistantContent += dataStr
-                  setMessages(prev => 
-                    prev.map(m => 
-                      m.id === assistantMessage.id 
-                        ? { ...m, content: assistantContent }
-                        : m
-                    )
-                  )
-                }
               }
             }
           }
+        }
+
+        if (!receivedDone) {
+          throw new Error('响应流已中断，请重试')
         }
         
         // 成功完成，退出重试循环

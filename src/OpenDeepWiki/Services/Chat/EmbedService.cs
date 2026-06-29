@@ -408,12 +408,30 @@ public class EmbedService : IEmbedService
         // Stream response
         var usageAccumulator = new AiUsageAccumulator();
         var responseBuilder = new System.Text.StringBuilder();
+        var currentBlockIndex = -1;
+        var currentBlockType = string.Empty;
+        var currentToolId = string.Empty;
+        var currentToolName = string.Empty;
+        var toolInputJson = new System.Text.StringBuilder();
+        var openAiToolCalls = new Dictionary<int, (string Id, string Name, System.Text.StringBuilder Args)>();
 
         var thread = await agent.CreateSessionAsync(cancellationToken);
 
         await foreach (var update in agent.RunStreamingAsync(chatMessages, thread, cancellationToken: cancellationToken))
         {
             usageAccumulator.Add(update);
+
+            foreach (var reasoningContent in update.Contents.OfType<TextReasoningContent>())
+            {
+                if (!string.IsNullOrWhiteSpace(reasoningContent.Text))
+                {
+                    yield return new SSEEvent
+                    {
+                        Type = SSEEventType.Thinking,
+                        Data = new { type = "delta", content = reasoningContent.Text }
+                    };
+                }
+            }
 
             if (!string.IsNullOrEmpty(update.Text))
             {
@@ -425,6 +443,167 @@ public class EmbedService : IEmbedService
                 };
             }
 
+            if (update.RawRepresentation is OpenAI.Chat.StreamingChatCompletionUpdate chatCompletionUpdate &&
+                chatCompletionUpdate.ToolCallUpdates.Count > 0)
+            {
+                foreach (var toolCall in chatCompletionUpdate.ToolCallUpdates)
+                {
+                    var index = toolCall.Index;
+
+                    if (!string.IsNullOrEmpty(toolCall.FunctionName))
+                    {
+                        var toolId = toolCall.ToolCallId ?? Guid.NewGuid().ToString();
+                        openAiToolCalls[index] = (toolId, toolCall.FunctionName, new System.Text.StringBuilder());
+
+                        yield return new SSEEvent
+                        {
+                            Type = SSEEventType.ToolCall,
+                            Data = new ToolCallDto
+                            {
+                                Id = toolId,
+                                Name = toolCall.FunctionName,
+                                Arguments = null
+                            }
+                        };
+                    }
+
+                    var argumentChunk = Encoding.UTF8.GetString(toolCall.FunctionArgumentsUpdate);
+                    if (!string.IsNullOrEmpty(argumentChunk) && openAiToolCalls.ContainsKey(index))
+                    {
+                        openAiToolCalls[index].Args.Append(argumentChunk);
+                    }
+                }
+            }
+
+            if (update.RawRepresentation is OpenAI.Chat.StreamingChatCompletionUpdate finishUpdate &&
+                finishUpdate.FinishReason == OpenAI.Chat.ChatFinishReason.ToolCalls)
+            {
+                foreach (var (_, value) in openAiToolCalls)
+                {
+                    var args = TryParseToolArguments(value.Args.ToString());
+                    yield return new SSEEvent
+                    {
+                        Type = SSEEventType.ToolCall,
+                        Data = new ToolCallDto
+                        {
+                            Id = value.Id,
+                            Name = value.Name,
+                            Arguments = args
+                        }
+                    };
+                }
+
+                openAiToolCalls.Clear();
+            }
+
+            if (update.RawRepresentation is ChatResponseUpdate
+                {
+                    RawRepresentation: RawMessageStreamEvent rawMessageStreamEvent
+                } &&
+                rawMessageStreamEvent.Json.TryGetProperty("type", out var typeElement))
+            {
+                var eventType = typeElement.GetString();
+
+                if (eventType == "content_block_start")
+                {
+                    if (rawMessageStreamEvent.Json.TryGetProperty("index", out var indexElement))
+                    {
+                        currentBlockIndex = indexElement.GetInt32();
+                    }
+
+                    if (rawMessageStreamEvent.Json.TryGetProperty("content_block", out var contentBlock))
+                    {
+                        currentBlockType = contentBlock.TryGetProperty("type", out var blockTypeElement)
+                            ? blockTypeElement.GetString() ?? string.Empty
+                            : string.Empty;
+
+                        if (currentBlockType == "thinking")
+                        {
+                            yield return new SSEEvent
+                            {
+                                Type = SSEEventType.Thinking,
+                                Data = new { type = "start", index = currentBlockIndex }
+                            };
+                        }
+                        else if (currentBlockType == "tool_use")
+                        {
+                            currentToolId = contentBlock.TryGetProperty("id", out var idElement)
+                                ? idElement.GetString() ?? string.Empty
+                                : string.Empty;
+                            currentToolName = contentBlock.TryGetProperty("name", out var nameElement)
+                                ? nameElement.GetString() ?? string.Empty
+                                : string.Empty;
+                            toolInputJson.Clear();
+
+                            yield return new SSEEvent
+                            {
+                                Type = SSEEventType.ToolCall,
+                                Data = new ToolCallDto
+                                {
+                                    Id = currentToolId,
+                                    Name = currentToolName,
+                                    Arguments = null
+                                }
+                            };
+                        }
+                    }
+                }
+                else if (eventType == "content_block_delta")
+                {
+                    if (rawMessageStreamEvent.Json.TryGetProperty("delta", out var delta))
+                    {
+                        var deltaType = delta.TryGetProperty("type", out var deltaTypeElement)
+                            ? deltaTypeElement.GetString()
+                            : null;
+
+                        if (deltaType == "thinking_delta")
+                        {
+                            var thinkingText = delta.TryGetProperty("thinking", out var thinkingElement)
+                                ? thinkingElement.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            if (!string.IsNullOrEmpty(thinkingText))
+                            {
+                                yield return new SSEEvent
+                                {
+                                    Type = SSEEventType.Thinking,
+                                    Data = new { type = "delta", content = thinkingText, index = currentBlockIndex }
+                                };
+                            }
+                        }
+                        else if (deltaType == "input_json_delta")
+                        {
+                            var partialJson = delta.TryGetProperty("partial_json", out var jsonElement)
+                                ? jsonElement.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            toolInputJson.Append(partialJson);
+                        }
+                    }
+                }
+                else if (eventType == "content_block_stop")
+                {
+                    if (currentBlockType == "tool_use" && !string.IsNullOrEmpty(currentToolId))
+                    {
+                        yield return new SSEEvent
+                        {
+                            Type = SSEEventType.ToolCall,
+                            Data = new ToolCallDto
+                            {
+                                Id = currentToolId,
+                                Name = currentToolName,
+                                Arguments = TryParseToolArguments(toolInputJson.ToString())
+                            }
+                        };
+
+                        currentToolId = string.Empty;
+                        currentToolName = string.Empty;
+                        toolInputJson.Clear();
+                    }
+
+                    currentBlockType = string.Empty;
+                }
+            }
         }
 
         var usageSnapshot = usageAccumulator.Snapshot;
@@ -474,6 +653,23 @@ public class EmbedService : IEmbedService
             Type = SSEEventType.Done,
             Data = new { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens }
         };
+    }
+
+    private static Dictionary<string, object>? TryParseToolArguments(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task RecordTokenUsageAsync(
