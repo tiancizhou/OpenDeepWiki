@@ -42,6 +42,9 @@ public static class ChatAppEndpoints
         group.MapGet("/knowledge-options", GetKnowledgeOptionsAsync)
             .WithName("GetAppKnowledgeOptions");
 
+        group.MapGet("/mcp-options", GetMcpOptionsAsync)
+            .WithName("GetAppMcpOptions");
+
         group.MapGet("/{id:guid}", GetAppByIdAsync)
             .WithName("GetAppById")
             .WithSummary("获取应用详情");
@@ -198,6 +201,31 @@ public static class ChatAppEndpoints
             .ToListAsync(cancellationToken);
 
         return Results.Ok(rows);
+    }
+
+    private static async Task<IResult> GetMcpOptionsAsync(
+        [FromServices] IContext context,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var mcps = await context.McpConfigs
+            .Where(m => m.IsActive && !m.IsDeleted)
+            .OrderBy(m => m.SortOrder)
+            .ThenBy(m => m.Name)
+            .Select(m => new AppMcpOptionDto
+            {
+                Id = m.Id,
+                Name = m.Name,
+                Description = m.Description
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(mcps);
     }
 
     private static async Task<IResult> GetAppByIdAsync(
@@ -375,4 +403,11 @@ public class AppKnowledgeOptionDto
     public string Language { get; set; } = string.Empty;
     public bool IsDefaultLanguage { get; set; }
     public string DisplayName { get; set; } = string.Empty;
+}
+
+public class AppMcpOptionDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
 }

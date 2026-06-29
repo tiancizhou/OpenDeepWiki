@@ -98,6 +98,12 @@ public class ChatApp : AggregateRoot<Guid>
     public string? KnowledgeLanguage { get; set; }
 
     /// <summary>
+    /// MCP tools enabled for this embedded application (JSON array of MCP config IDs).
+    /// </summary>
+    [StringLength(2000)]
+    public string? EnabledMcpIds { get; set; }
+
+    /// <summary>
     /// API密钥
     /// </summary>
     public string? ApiKey { get; set; }

@@ -30,6 +30,7 @@ export interface CreateChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  enabledMcpIds?: string[]
 }
 
 /**
@@ -54,6 +55,7 @@ export interface UpdateChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  enabledMcpIds?: string[]
 }
 
 /**
@@ -82,6 +84,7 @@ export interface ChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  enabledMcpIds: string[]
   createdAt: string
   updatedAt?: string
 }
@@ -94,6 +97,12 @@ export interface AppKnowledgeOption {
   language: string
   isDefaultLanguage: boolean
   displayName: string
+}
+
+export interface AppMcpOption {
+  id: string
+  name: string
+  description?: string
 }
 
 // ==================== 统计相关类型 ====================
@@ -230,6 +239,10 @@ export async function getAppAiModels(providerId: string): Promise<AppAiModel[]> 
 
 export async function getAppKnowledgeOptions(): Promise<AppKnowledgeOption[]> {
   return api.get<AppKnowledgeOption[]>('/api/v1/apps/knowledge-options')
+}
+
+export async function getAppMcpOptions(): Promise<AppMcpOption[]> {
+  return api.get<AppMcpOption[]>('/api/v1/apps/mcp-options')
 }
 
 // ==================== 统计 API ====================

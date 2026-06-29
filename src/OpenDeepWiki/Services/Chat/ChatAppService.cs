@@ -29,6 +29,7 @@ public class CreateChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<string>? EnabledMcpIds { get; set; }
 }
 
 /// <summary>
@@ -54,6 +55,7 @@ public class UpdateChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<string>? EnabledMcpIds { get; set; }
 }
 
 
@@ -84,6 +86,7 @@ public class ChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<string> EnabledMcpIds { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -188,6 +191,7 @@ public class ChatAppService : IChatAppService
             KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo),
             KnowledgeBranch = NormalizeOptional(dto.KnowledgeBranch),
             KnowledgeLanguage = NormalizeOptional(dto.KnowledgeLanguage),
+            EnabledMcpIds = dto.EnabledMcpIds != null ? SerializeJsonArray(dto.EnabledMcpIds) : null,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -266,6 +270,7 @@ public class ChatAppService : IChatAppService
         if (dto.DefaultModel != null) app.DefaultModel = dto.DefaultModel;
         if (dto.RateLimitPerMinute.HasValue) app.RateLimitPerMinute = dto.RateLimitPerMinute;
         ApplyKnowledgeBinding(app, dto);
+        if (dto.EnabledMcpIds != null) app.EnabledMcpIds = SerializeJsonArray(dto.EnabledMcpIds);
         if (dto.IsActive.HasValue) app.IsActive = dto.IsActive.Value;
 
         app.UpdatedAt = DateTime.UtcNow;
@@ -426,6 +431,7 @@ public class ChatAppService : IChatAppService
             KnowledgeRepo = app.KnowledgeRepo,
             KnowledgeBranch = app.KnowledgeBranch,
             KnowledgeLanguage = app.KnowledgeLanguage,
+            EnabledMcpIds = ParseJsonArray(app.EnabledMcpIds),
             CreatedAt = app.CreatedAt,
             UpdatedAt = app.UpdatedAt
         };
@@ -450,6 +456,19 @@ public class ChatAppService : IChatAppService
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? SerializeJsonArray(IEnumerable<string>? values)
+    {
+        var normalized = values?
+            .Select(NormalizeOptional)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return normalized is { Count: > 0 }
+            ? JsonSerializer.Serialize(normalized)
+            : null;
     }
 
     /// <summary>

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -28,11 +29,13 @@ import {
   CreateChatAppDto,
   UpdateChatAppDto,
   AppAiModel,
+  AppMcpOption,
   AppAiProvider,
   AppKnowledgeOption,
   getAppAiModels,
   getAppAiProviders,
   getAppKnowledgeOptions,
+  getAppMcpOptions,
 } from "@/lib/apps-api";
 
 interface AppFormDialogProps {
@@ -70,6 +73,8 @@ export function AppFormDialog({
   const [knowledgeRepository, setKnowledgeRepository] = useState("_none");
   const [knowledgeBranch, setKnowledgeBranch] = useState("");
   const [knowledgeLanguage, setKnowledgeLanguage] = useState("");
+  const [mcpOptions, setMcpOptions] = useState<AppMcpOption[]>([]);
+  const [enabledMcpIds, setEnabledMcpIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +97,7 @@ export function AppFormDialog({
       );
       setKnowledgeBranch(app.knowledgeBranch || "");
       setKnowledgeLanguage(app.knowledgeLanguage || "");
+      setEnabledMcpIds(app.enabledMcpIds || []);
     } else {
       setName("");
       setDescription("");
@@ -106,6 +112,7 @@ export function AppFormDialog({
       setKnowledgeRepository("_none");
       setKnowledgeBranch("");
       setKnowledgeLanguage("");
+      setEnabledMcpIds([]);
     }
 
     setError(null);
@@ -129,6 +136,13 @@ export function AppFormDialog({
         setKnowledgeOptions(options);
       })
       .catch(() => setError(t("apps.form.loadKnowledgeOptionsFailed")));
+
+    getAppMcpOptions()
+      .then((options) => {
+        if (!isMounted) return;
+        setMcpOptions(options);
+      })
+      .catch(() => setError(t("apps.form.loadMcpOptionsFailed")));
 
     return () => {
       isMounted = false;
@@ -270,6 +284,7 @@ export function AppFormDialog({
             ? parseInt(rateLimitPerMinute, 10)
             : undefined,
           isActive,
+          enabledMcpIds,
           ...knowledgeBinding,
         };
         await updateApp(app.id, updateDto);
@@ -288,6 +303,7 @@ export function AppFormDialog({
           rateLimitPerMinute: rateLimitPerMinute
             ? parseInt(rateLimitPerMinute, 10)
             : undefined,
+          enabledMcpIds,
           ...knowledgeBinding,
         };
         await createApp(createDto);
@@ -364,6 +380,13 @@ export function AppFormDialog({
         : []),
     ])
   );
+  const toggleMcp = (mcpId: string, checked: boolean) => {
+    setEnabledMcpIds((current) =>
+      checked
+        ? Array.from(new Set([...current, mcpId]))
+        : current.filter((id) => id !== mcpId)
+    );
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -591,6 +614,46 @@ export function AppFormDialog({
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4 border-t pt-4">
+            <div className="space-y-1">
+              <h3 className="font-medium">{t("apps.form.mcpTools")}</h3>
+              <p className="text-sm text-muted-foreground">
+                {t("apps.form.mcpToolsHint")}
+              </p>
+            </div>
+
+            {mcpOptions.length === 0 ? (
+              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                {t("apps.form.noMcpTools")}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {mcpOptions.map((mcp) => (
+                  <label
+                    key={mcp.id}
+                    className="flex cursor-pointer items-start gap-3 rounded-md border p-3 transition-colors hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={enabledMcpIds.includes(mcp.id)}
+                      onCheckedChange={(checked) => toggleMcp(mcp.id, checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="min-w-0 flex-1 space-y-1">
+                      <span className="block text-sm font-medium leading-none">
+                        {mcp.name}
+                      </span>
+                      {mcp.description && (
+                        <span className="block text-sm text-muted-foreground">
+                          {mcp.description}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                ))}
               </div>
             )}
           </div>

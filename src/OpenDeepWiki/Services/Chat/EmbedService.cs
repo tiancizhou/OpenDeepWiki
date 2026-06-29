@@ -107,6 +107,7 @@ public class EmbedService : IEmbedService
     private readonly IChatLogService _chatLogService;
     private readonly AgentFactory _agentFactory;
     private readonly IAiProviderResolver _aiProviderResolver;
+    private readonly IMcpToolConverter _mcpToolConverter;
     private readonly RepositoryAnalyzerOptions _repoOptions;
     private readonly ILogger<EmbedService> _logger;
 
@@ -118,6 +119,7 @@ public class EmbedService : IEmbedService
         IChatLogService chatLogService,
         AgentFactory agentFactory,
         IAiProviderResolver aiProviderResolver,
+        IMcpToolConverter mcpToolConverter,
         IOptions<RepositoryAnalyzerOptions> repoOptions,
         ILogger<EmbedService> logger)
     {
@@ -128,6 +130,7 @@ public class EmbedService : IEmbedService
         _chatLogService = chatLogService;
         _agentFactory = agentFactory;
         _aiProviderResolver = aiProviderResolver;
+        _mcpToolConverter = mcpToolConverter;
         _repoOptions = repoOptions.Value;
         _logger = logger;
     }
@@ -352,6 +355,17 @@ public class EmbedService : IEmbedService
                 knowledgeContext.Language!,
                 cancellationToken);
             tools.Add(chatDocReaderTool.GetTool());
+        }
+
+        if (app.EnabledMcpIds.Count > 0)
+        {
+            var mcpTools = await _mcpToolConverter.ConvertMcpConfigsToToolsAsync(
+                app.EnabledMcpIds,
+                cancellationToken);
+            tools.AddRange(mcpTools);
+
+            _logger.LogInformation("Loaded {ToolCount} MCP tools for embedded app {AppId}",
+                mcpTools.Count, request.AppId);
         }
 
         // Build enhanced system prompt with repository context
@@ -932,6 +946,9 @@ public class EmbedService : IEmbedService
         {
             sb.AppendLine("You provide expert guidance on software development topics.");
         }
+        sb.AppendLine();
+        sb.AppendLine("If MCP tools are available, use them only when they are relevant to the user's request.");
+        sb.AppendLine("Never reveal MCP server URLs, API keys, internal tool configuration, or raw credentials.");
         sb.AppendLine("</capabilities>");
         sb.AppendLine();
 
