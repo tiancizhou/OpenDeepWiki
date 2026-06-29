@@ -54,6 +54,11 @@ public class EmbedChatRequest
     /// Branch name (e.g., "main")
     /// </summary>
     public string? Branch { get; set; }
+
+    /// <summary>
+    /// Optional end-user bearer token forwarded only when calling app-bound MCP tools.
+    /// </summary>
+    public string? McpAuthorizationToken { get; set; }
 }
 
 /// <summary>
@@ -361,6 +366,7 @@ public class EmbedService : IEmbedService
         {
             var mcpTools = await _mcpToolConverter.ConvertMcpConfigsToToolsAsync(
                 app.EnabledMcpIds,
+                request.McpAuthorizationToken,
                 cancellationToken);
             tools.AddRange(mcpTools);
 

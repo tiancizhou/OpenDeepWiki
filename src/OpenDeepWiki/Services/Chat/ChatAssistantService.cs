@@ -505,7 +505,7 @@ public class ChatAssistantService : IChatAssistantService
         if (config.EnabledMcpIds.Count > 0)
         {
             var mcpTools = await _mcpToolConverter.ConvertMcpConfigsToToolsAsync(
-                config.EnabledMcpIds, cancellationToken);
+                config.EnabledMcpIds, cancellationToken: cancellationToken);
             tools.AddRange(mcpTools);
         }
 

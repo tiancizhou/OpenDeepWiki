@@ -8,6 +8,7 @@
  *   src="https://your-domain.com/embed.js"
  *   data-app-id="app_xxxxx"
  *   data-icon="https://example.com/icon.png"
+ *   data-user-token="current-user-token"
  * ></script>
  * 
  * Requirements: 14.2, 14.3, 14.4, 14.7
@@ -27,6 +28,7 @@
   var iconUrl = script.getAttribute('data-icon');
   var position = script.getAttribute('data-position') || 'bottom-right';
   var theme = script.getAttribute('data-theme') || 'light';
+  var userToken = script.getAttribute('data-user-token') || '';
 
   // 验证必需参数
   if (!appId) {
@@ -46,7 +48,8 @@
     iconUrl: iconUrl,
     position: position,
     theme: theme,
-    apiBaseUrl: apiBaseUrl
+    apiBaseUrl: apiBaseUrl,
+    userToken: userToken
   };
 
   // 状态
@@ -371,6 +374,7 @@
     
     var requestBody = {
       appId: config.appId,
+      mcpAuthorizationToken: config.userToken || undefined,
       messages: messages.map(function(msg) {
         return {
           role: msg.role,
@@ -1114,6 +1118,12 @@
         input.value = content;
         sendMessage();
       }
+    },
+    setUserToken: function(token) {
+      config.userToken = token || '';
+    },
+    clearUserToken: function() {
+      config.userToken = '';
     }
   };
 

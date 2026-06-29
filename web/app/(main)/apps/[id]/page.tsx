@@ -172,6 +172,13 @@ export default function AppDetailPage() {
 ></script>`;
   };
 
+  const getEmbedTokenScript = () => {
+    return `<script>
+  // 可选：如果绑定的 MCP 需要当前登录用户身份，请在用户登录后设置。
+  window.OpenDeepWiki?.setUserToken(currentUserToken);
+</script>`;
+  };
+
   if (!authLoading && !isAuthenticated) {
     return (
       <AppLayout activeItem={activeItem} onItemClick={setActiveItem}>
@@ -335,13 +342,13 @@ export default function AppDetailPage() {
               </p>
               <div className="relative">
                 <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm">
-                  <code>{getEmbedScript()}</code>
+                  <code>{`${getEmbedScript()}\n${getEmbedTokenScript()}`}</code>
                 </pre>
                 <Button
                   variant="outline"
                   size="sm"
                   className="absolute top-2 right-2"
-                  onClick={() => handleCopy(getEmbedScript())}
+                  onClick={() => handleCopy(`${getEmbedScript()}\n${getEmbedTokenScript()}`)}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>

@@ -17,10 +17,12 @@ public interface IMcpToolConverter
     /// Converts MCP configurations to AI tools.
     /// </summary>
     /// <param name="mcpIds">List of MCP configuration IDs to convert.</param>
+    /// <param name="authorizationToken">Optional per-session bearer token forwarded to MCP servers.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>List of AI tools created from MCP configurations.</returns>
     Task<List<AITool>> ConvertMcpConfigsToToolsAsync(
         List<string> mcpIds,
+        string? authorizationToken = null,
         CancellationToken cancellationToken = default);
 }
 
@@ -46,6 +48,7 @@ public class McpToolConverter : IMcpToolConverter
     /// <inheritdoc />
     public async Task<List<AITool>> ConvertMcpConfigsToToolsAsync(
         List<string> mcpIds,
+        string? authorizationToken = null,
         CancellationToken cancellationToken = default)
     {
         var tools = new List<AITool>();
@@ -64,7 +67,7 @@ public class McpToolConverter : IMcpToolConverter
         {
             try
             {
-                var tool = CreateMcpTool(config);
+                var tool = CreateMcpTool(config, authorizationToken);
                 tools.Add(tool);
                 _logger.LogInformation("Created MCP tool: {Name}", config.Name);
             }
@@ -80,12 +83,12 @@ public class McpToolConverter : IMcpToolConverter
     /// <summary>
     /// Creates an AI tool from an MCP configuration.
     /// </summary>
-    private AITool CreateMcpTool(McpConfig config)
+    private AITool CreateMcpTool(McpConfig config, string? authorizationToken)
     {
         // Create a wrapper function that calls the MCP server
         var callMcpAsync = async (string input, CancellationToken ct) =>
         {
-            return await CallMcpServerAsync(config, input, ct);
+            return await CallMcpServerAsync(config, authorizationToken, input, ct);
         };
 
         // Create the AI function with metadata from the MCP config
@@ -103,6 +106,7 @@ public class McpToolConverter : IMcpToolConverter
     /// </summary>
     private async Task<string> CallMcpServerAsync(
         McpConfig config,
+        string? authorizationToken,
         string input,
         CancellationToken cancellationToken)
     {
@@ -113,10 +117,10 @@ public class McpToolConverter : IMcpToolConverter
             // Set up the request
             var request = new HttpRequestMessage(HttpMethod.Post, config.ServerUrl);
             
-            // Add API key if configured
-            if (!string.IsNullOrEmpty(config.ApiKey))
+            var bearerToken = NormalizeBearerToken(authorizationToken) ?? NormalizeBearerToken(config.ApiKey);
+            if (!string.IsNullOrEmpty(bearerToken))
             {
-                request.Headers.Add("Authorization", $"Bearer {config.ApiKey}");
+                request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {bearerToken}");
             }
 
             // Set the request body
@@ -159,5 +163,24 @@ public class McpToolConverter : IMcpToolConverter
         }
 
         return sanitized;
+    }
+
+    private static string? NormalizeBearerToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        var normalized = token.Trim();
+        if (normalized.Contains('\r') || normalized.Contains('\n'))
+        {
+            return null;
+        }
+
+        const string bearerPrefix = "Bearer ";
+        return normalized.StartsWith(bearerPrefix, StringComparison.OrdinalIgnoreCase)
+            ? normalized[bearerPrefix.Length..].Trim()
+            : normalized;
     }
 }
