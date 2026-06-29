@@ -246,7 +246,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         ChatOptions? options,
         bool stream)
     {
-        var requestMessages = BuildMessages(messages);
+        var (requestMessages, disableThinkingForToolContinuation) = BuildMessages(messages);
         PrependInstructions(requestMessages, options?.Instructions);
 
         var body = new JsonObject
@@ -269,7 +269,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         ApplyTools(body, options);
         ApplyRequestOverrides(body, null, _options.ProviderRequestOverridesJson);
         ApplyRequestOverrides(body, null, _options.ModelRequestOverridesJson);
-        ApplyThinkingConfig(body, options);
+        ApplyThinkingConfig(body, options, disableThinkingForToolContinuation);
 
         var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -285,9 +285,10 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         return request;
     }
 
-    private JsonArray BuildMessages(IEnumerable<ChatMessage> messages)
+    private (JsonArray Messages, bool DisableThinkingForToolContinuation) BuildMessages(IEnumerable<ChatMessage> messages)
     {
         var array = new JsonArray();
+        var disableThinkingForToolContinuation = false;
         foreach (var message in messages)
         {
             var functionResults = message.Contents.OfType<FunctionResultContent>().ToList();
@@ -317,6 +318,11 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             node["content"] = string.IsNullOrEmpty(text) && functionCalls.Count > 0 ? null : text;
 
             var reasoningContent = GetReasoningContent(message, functionCalls);
+            if (role == "assistant" && functionCalls.Count > 0 && string.IsNullOrEmpty(reasoningContent))
+            {
+                disableThinkingForToolContinuation = true;
+            }
+
             if (role == "assistant" && !string.IsNullOrEmpty(reasoningContent))
             {
                 node["reasoning_content"] = reasoningContent;
@@ -345,7 +351,7 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
             array.Add(node);
         }
 
-        return array;
+        return (array, disableThinkingForToolContinuation);
     }
 
     private static void PrependInstructions(JsonArray messages, string? instructions)
@@ -477,14 +483,17 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         };
     }
 
-    private void ApplyThinkingConfig(JsonObject body, ChatOptions? options)
+    private void ApplyThinkingConfig(
+        JsonObject body,
+        ChatOptions? options,
+        bool forceDisableThinking = false)
     {
         if (!_options.SupportsThinking || string.IsNullOrWhiteSpace(_options.ThinkingConfigJson))
         {
             return;
         }
 
-        var enabled = ResolveThinkingEnabled(options);
+        var enabled = forceDisableThinking ? false : ResolveThinkingEnabled(options);
         if (enabled == null)
         {
             return;
