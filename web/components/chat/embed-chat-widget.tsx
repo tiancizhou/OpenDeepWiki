@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useTranslations } from "next-intl"
-import { MessageCircle, X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
+import { X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
@@ -74,6 +74,28 @@ const DEFAULT_MAX_RETRIES = 2
  * 默认重试延迟（毫秒）
  */
 const DEFAULT_RETRY_DELAY_MS = 1000
+
+function AssistantAvatar() {
+  return (
+    <span className="inline-flex animate-[odw-assistant-float_2.8s_ease-in-out_infinite]" aria-hidden="true">
+      <svg width="62" height="62" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="40" cy="40" r="38" fill="rgba(255,255,255,0.18)" />
+        <path d="M23 38c0-10.5 7.5-18 17-18s17 7.5 17 18v10c0 8.5-7 15-17 15s-17-6.5-17-15V38z" fill="white" />
+        <path d="M27 35c1.5-8 6.5-12 13-12s11.5 4 13 12c-4.2-3-8.4-4.4-13-4.4S31.2 32 27 35z" fill="#dbeafe" />
+        <rect x="29" y="37" width="22" height="13" rx="6.5" fill="#eef6ff" />
+        <circle cx="35" cy="43" r="2.4" fill="#1d4ed8" />
+        <circle cx="45" cy="43" r="2.4" fill="#1d4ed8" />
+        <path d="M36 50c2.4 2 5.6 2 8 0" stroke="#0f766e" strokeWidth="2.4" strokeLinecap="round" />
+        <path d="M22 41h-3.5A4.5 4.5 0 0 1 14 36.5v-2A4.5 4.5 0 0 1 18.5 30H22" stroke="white" strokeWidth="5" strokeLinecap="round" />
+        <path d="M58 41h3.5A4.5 4.5 0 0 0 66 36.5v-2A4.5 4.5 0 0 0 61.5 30H58" stroke="white" strokeWidth="5" strokeLinecap="round" />
+        <path d="M55 50c6 0 9 3 9 7s-3 7-9 7" stroke="white" strokeWidth="4" strokeLinecap="round" />
+        <path d="M58 63l4 4 8-9" stroke="#34d399" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="58" cy="21" r="8" fill="#fbbf24" />
+        <path d="M55 21h6M58 18v6" stroke="white" strokeWidth="2.2" strokeLinecap="round" />
+      </svg>
+    </span>
+  )
+}
 
 /**
  * 嵌入对话组件
@@ -448,19 +470,44 @@ export function EmbedChatWidget({
 
   return (
     <>
+      <style jsx global>{`
+        @keyframes odw-assistant-pulse {
+          0% {
+            transform: scale(0.86);
+            opacity: 0.45;
+          }
+          70%,
+          100% {
+            transform: scale(1.28);
+            opacity: 0;
+          }
+        }
+
+        @keyframes odw-assistant-float {
+          0%,
+          100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-2px);
+          }
+        }
+      `}</style>
+
       {/* 悬浮球 */}
       <button
         type="button"
         onClick={handleToggle}
         className={cn(
-          "fixed z-[99999] flex items-center justify-center",
-          "w-14 h-14 rounded-full",
-          "bg-gradient-to-br from-indigo-500 to-purple-600",
-          "text-white shadow-lg",
+          "fixed z-[99999] flex items-center justify-center overflow-visible",
+          "h-[72px] w-[72px] rounded-full",
+          "bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600",
+          "text-white shadow-[0_16px_34px_rgba(37,99,235,0.34),0_4px_12px_rgba(15,23,42,0.18)]",
           "transition-all duration-200 ease-in-out",
-          "hover:scale-110 hover:shadow-xl",
+          "hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_20px_42px_rgba(37,99,235,0.42),0_8px_18px_rgba(15,23,42,0.22)]",
           "active:scale-95",
           "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+          !isOpen && "before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-blue-600/30 before:content-[''] before:animate-[odw-assistant-pulse_2.2s_ease-out_infinite]",
           getPositionClasses()
         )}
         aria-label={isOpen ? t("panel.close") : t("assistant.title")}
@@ -472,10 +519,10 @@ export function EmbedChatWidget({
           <img
             src={iconUrl}
             alt={t("assistant.title")}
-            className="h-8 w-8 rounded-full object-cover"
+            className="h-12 w-12 rounded-full object-cover"
           />
         ) : (
-          <MessageCircle className="h-6 w-6" />
+          <AssistantAvatar />
         )}
       </button>
 

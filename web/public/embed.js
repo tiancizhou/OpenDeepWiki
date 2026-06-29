@@ -80,23 +80,24 @@
     ].join(';'),
     floatingBall: [
       'position: fixed',
-      'width: 56px',
-      'height: 56px',
+      'width: 72px',
+      'height: 72px',
       'border-radius: 50%',
-      'background: linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      'background: linear-gradient(145deg, #20d3a2 0%, #2563eb 62%, #7c3aed 100%)',
       'border: none',
       'cursor: pointer',
       'display: flex',
       'align-items: center',
       'justify-content: center',
-      'box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15)',
+      'box-shadow: 0 16px 34px rgba(37, 99, 235, 0.34), 0 4px 12px rgba(15, 23, 42, 0.18)',
       'transition: transform 0.2s ease, box-shadow 0.2s ease',
       'outline: none',
+      'overflow: visible',
       'right: 24px',
       'bottom: 24px',
       'z-index: 999999'
     ].join(';'),
-    floatingBallHover: 'transform: scale(1.1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);',
+    floatingBallHover: 'transform: translateY(-3px) scale(1.06); box-shadow: 0 20px 42px rgba(37, 99, 235, 0.42), 0 8px 18px rgba(15, 23, 42, 0.22);',
     panel: [
       'position: fixed',
       'top: 0',
@@ -219,7 +220,25 @@
 
   // 图标SVG
   var icons = {
-    chat: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
+    assistant: [
+      '<span class="odw-assistant-avatar" aria-hidden="true">',
+      '<svg width="62" height="62" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">',
+      '<circle cx="40" cy="40" r="38" fill="rgba(255,255,255,0.18)"/>',
+      '<path d="M23 38c0-10.5 7.5-18 17-18s17 7.5 17 18v10c0 8.5-7 15-17 15s-17-6.5-17-15V38z" fill="white"/>',
+      '<path d="M27 35c1.5-8 6.5-12 13-12s11.5 4 13 12c-4.2-3-8.4-4.4-13-4.4S31.2 32 27 35z" fill="#dbeafe"/>',
+      '<rect x="29" y="37" width="22" height="13" rx="6.5" fill="#eef6ff"/>',
+      '<circle cx="35" cy="43" r="2.4" fill="#1d4ed8"/>',
+      '<circle cx="45" cy="43" r="2.4" fill="#1d4ed8"/>',
+      '<path d="M36 50c2.4 2 5.6 2 8 0" stroke="#0f766e" stroke-width="2.4" stroke-linecap="round"/>',
+      '<path d="M22 41h-3.5A4.5 4.5 0 0 1 14 36.5v-2A4.5 4.5 0 0 1 18.5 30H22" stroke="white" stroke-width="5" stroke-linecap="round"/>',
+      '<path d="M58 41h3.5A4.5 4.5 0 0 0 66 36.5v-2A4.5 4.5 0 0 0 61.5 30H58" stroke="white" stroke-width="5" stroke-linecap="round"/>',
+      '<path d="M55 50c6 0 9 3 9 7s-3 7-9 7" stroke="white" stroke-width="4" stroke-linecap="round"/>',
+      '<path d="M58 63l4 4 8-9" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>',
+      '<circle cx="58" cy="21" r="8" fill="#fbbf24"/>',
+      '<path d="M55 21h6M58 18v6" stroke="white" stroke-width="2.2" stroke-linecap="round"/>',
+      '</svg>',
+      '</span>'
+    ].join(''),
     close: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>',
     send: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>'
   };
@@ -231,6 +250,27 @@
       '@keyframes odw-bounce {',
       '  0%, 80%, 100% { transform: scale(0); }',
       '  40% { transform: scale(1); }',
+      '}',
+      '@keyframes odw-assistant-pulse {',
+      '  0% { transform: scale(0.86); opacity: 0.45; }',
+      '  70% { transform: scale(1.28); opacity: 0; }',
+      '  100% { transform: scale(1.28); opacity: 0; }',
+      '}',
+      '@keyframes odw-assistant-float {',
+      '  0%, 100% { transform: translateY(0); }',
+      '  50% { transform: translateY(-2px); }',
+      '}',
+      '#odw-floating-ball:not([data-open="true"])::before {',
+      '  content: "";',
+      '  position: absolute;',
+      '  inset: -7px;',
+      '  border-radius: 999px;',
+      '  border: 2px solid rgba(37, 99, 235, 0.28);',
+      '  animation: odw-assistant-pulse 2.2s ease-out infinite;',
+      '}',
+      '#odw-floating-ball:not([data-open="true"]) .odw-assistant-avatar {',
+      '  display: inline-flex;',
+      '  animation: odw-assistant-float 2.8s ease-in-out infinite;',
       '}',
       '.odw-dot-1 { animation-delay: -0.32s; }',
       '.odw-dot-2 { animation-delay: -0.16s; }',
@@ -399,9 +439,9 @@
 
     var iconContent;
     if (config.iconUrl) {
-      iconContent = '<img src="' + config.iconUrl + '" alt="Chat" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">';
+      iconContent = '<img src="' + config.iconUrl + '" alt="Chat" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">';
     } else {
-      iconContent = '<span style="color: white;">' + icons.chat + '</span>';
+      iconContent = icons.assistant;
     }
 
     var ball = createElement('button', {
@@ -419,6 +459,7 @@
       }
     }, iconContent);
 
+    ball.setAttribute('data-open', 'false');
     container.appendChild(ball);
     return ball;
   }
@@ -609,8 +650,9 @@
       ball.innerHTML = state.isOpen
         ? '<span style="color: white;">' + icons.close + '</span>'
         : (config.iconUrl
-            ? '<img src="' + config.iconUrl + '" alt="Chat" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;">'
-            : '<span style="color: white;">' + icons.chat + '</span>');
+            ? '<img src="' + config.iconUrl + '" alt="Chat" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">'
+            : icons.assistant);
+      ball.setAttribute('data-open', state.isOpen ? 'true' : 'false');
       ball.setAttribute('aria-label', state.isOpen ? '关闭对话助手' : '打开对话助手');
     }
   }
