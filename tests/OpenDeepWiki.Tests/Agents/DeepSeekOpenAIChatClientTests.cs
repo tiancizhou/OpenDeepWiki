@@ -405,6 +405,45 @@ public class DeepSeekOpenAIChatClientTests
         Assert.False(document.RootElement.GetProperty("enable_thinking").GetBoolean());
     }
 
+    [Fact]
+    public async Task GetResponseAsync_DisablesThinkingForToolContinuationAfterRequestOverrides()
+    {
+        var handler = new StubHttpMessageHandler(_ => JsonResponse("""
+            {"id":"chatcmpl-test","model":"deepseek-v4-flash","choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}]}
+            """));
+        var client = CreateClient(
+            handler,
+            new AiRequestOptions
+            {
+                SupportsThinking = true,
+                ThinkingConfigJson = """
+                    {
+                      "bodyParams":{"enable_thinking":true},
+                      "disabledBodyParams":{"enable_thinking":false}
+                    }
+                    """,
+                ModelRequestOverridesJson = """
+                    {
+                      "bodyParams":{"enable_thinking":true}
+                    }
+                    """
+            });
+
+        await client.GetResponseAsync([
+            new ChatMessage(ChatRole.User, "query learning data"),
+            new ChatMessage(ChatRole.Assistant, [
+                new FunctionCallContent(
+                    "call_missing_reasoning",
+                    "get_my_learning_overview",
+                    new Dictionary<string, object?>())
+            ]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call_missing_reasoning", "{\"ok\":true}")])
+        ]);
+
+        using var document = JsonDocument.Parse(handler.RequestBodies.Single());
+        Assert.False(document.RootElement.GetProperty("enable_thinking").GetBoolean());
+    }
+
     private static DeepSeekOpenAIChatClient CreateClient(
         StubHttpMessageHandler handler,
         AiRequestOptions? options = null)

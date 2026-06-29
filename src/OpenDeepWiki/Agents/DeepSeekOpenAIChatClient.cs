@@ -270,6 +270,10 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         ApplyRequestOverrides(body, null, _options.ProviderRequestOverridesJson);
         ApplyRequestOverrides(body, null, _options.ModelRequestOverridesJson);
         ApplyThinkingConfig(body, options, disableThinkingForToolContinuation);
+        if (disableThinkingForToolContinuation)
+        {
+            ApplyFallbackDisabledThinkingConfig(body, null);
+        }
 
         var request = new HttpRequestMessage(
             HttpMethod.Post,
@@ -519,7 +523,8 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         {
             MergeJsonObject(body, bodyParams);
         }
-        else if (!enabled.Value && forceDisableThinking)
+
+        if (!enabled.Value && forceDisableThinking)
         {
             ApplyFallbackDisabledThinkingConfig(body, config);
         }
@@ -1045,9 +1050,9 @@ public sealed class DeepSeekOpenAIChatClient : IChatClient
         }
     }
 
-    private static void ApplyFallbackDisabledThinkingConfig(JsonObject body, JsonObject thinkingConfig)
+    private static void ApplyFallbackDisabledThinkingConfig(JsonObject body, JsonObject? thinkingConfig)
     {
-        if (thinkingConfig["bodyParams"] is JsonObject enabledBodyParams)
+        if (thinkingConfig?["bodyParams"] is JsonObject enabledBodyParams)
         {
             foreach (var pair in enabledBodyParams)
             {
