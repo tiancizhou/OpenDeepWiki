@@ -114,7 +114,6 @@ public class ChatApp : AggregateRoot<Guid>
     /// <summary>
     /// 可用模型列表（JSON数组）
     /// </summary>
-    [StringLength(1000)]
     public string? AvailableModels { get; set; }
 
     /// <summary>

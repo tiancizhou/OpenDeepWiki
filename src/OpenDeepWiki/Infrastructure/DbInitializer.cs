@@ -637,6 +637,7 @@ public static class DbInitializer
             ALTER TABLE ""ModelConfigs"" ADD COLUMN IF NOT EXISTS ""AiProviderId"" TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""AiProviderId"" TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""SystemPrompt"" TEXT;
+            ALTER TABLE ""ChatApps"" ALTER COLUMN ""AvailableModels"" TYPE TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeOwner"" VARCHAR(100);
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeRepo"" VARCHAR(100);
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeBranch"" VARCHAR(200);

@@ -231,7 +231,7 @@ export function AppFormDialog({
         .split("\n")
         .map((domain) => domain.trim())
         .filter(Boolean);
-      const modelsArray = aiModels.map((model) => model.modelId);
+      const modelsArray = defaultModel.trim() ? [defaultModel.trim()] : [];
       const selectedProvider = aiProviders.find((provider) => provider.id === aiProviderId);
       const selectedKnowledge = knowledgeOptions.find(
         (option) =>
