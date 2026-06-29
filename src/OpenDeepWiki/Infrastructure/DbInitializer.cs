@@ -369,6 +369,45 @@ public static class DbInitializer
         await ctx.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_AiModelConfigs_IsActive ON AiModelConfigs (IsActive)");
 
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS AppStatistics (
+                Id TEXT NOT NULL PRIMARY KEY,
+                AppId TEXT NOT NULL,
+                Date TEXT NOT NULL,
+                RequestCount INTEGER NOT NULL DEFAULT 0,
+                InputTokens INTEGER NOT NULL DEFAULT 0,
+                OutputTokens INTEGER NOT NULL DEFAULT 0,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT,
+                DeletedAt TEXT,
+                IsDeleted INTEGER NOT NULL DEFAULT 0,
+                Version BLOB
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_AppStatistics_AppId_Date ON AppStatistics (AppId, Date)");
+
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ChatLogs (
+                Id TEXT NOT NULL PRIMARY KEY,
+                AppId TEXT NOT NULL,
+                UserIdentifier TEXT,
+                Question TEXT NOT NULL,
+                AnswerSummary TEXT,
+                InputTokens INTEGER NOT NULL DEFAULT 0,
+                OutputTokens INTEGER NOT NULL DEFAULT 0,
+                ModelUsed TEXT,
+                SourceDomain TEXT,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT,
+                DeletedAt TEXT,
+                IsDeleted INTEGER NOT NULL DEFAULT 0,
+                Version BLOB
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS IX_ChatLogs_AppId ON ChatLogs (AppId)");
+        await ctx.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS IX_ChatLogs_CreatedAt ON ChatLogs (CreatedAt)");
+
         // Add Description column if not exists
         var connection = ctx.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
@@ -544,6 +583,45 @@ public static class DbInitializer
             CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AiModelConfigs_ProviderId_ModelId"" ON ""AiModelConfigs"" (""ProviderId"", ""ModelId"")");
         await ctx.Database.ExecuteSqlRawAsync(@"
             CREATE INDEX IF NOT EXISTS ""IX_AiModelConfigs_IsActive"" ON ""AiModelConfigs"" (""IsActive"")");
+
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""AppStatistics"" (
+                ""Id"" UUID NOT NULL PRIMARY KEY,
+                ""AppId"" VARCHAR(64) NOT NULL,
+                ""Date"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                ""RequestCount"" BIGINT NOT NULL DEFAULT 0,
+                ""InputTokens"" BIGINT NOT NULL DEFAULT 0,
+                ""OutputTokens"" BIGINT NOT NULL DEFAULT 0,
+                ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                ""UpdatedAt"" TIMESTAMP WITH TIME ZONE,
+                ""DeletedAt"" TIMESTAMP WITH TIME ZONE,
+                ""IsDeleted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                ""Version"" BYTEA
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AppStatistics_AppId_Date"" ON ""AppStatistics"" (""AppId"", ""Date"")");
+
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""ChatLogs"" (
+                ""Id"" UUID NOT NULL PRIMARY KEY,
+                ""AppId"" VARCHAR(64) NOT NULL,
+                ""UserIdentifier"" VARCHAR(100),
+                ""Question"" TEXT NOT NULL,
+                ""AnswerSummary"" VARCHAR(500),
+                ""InputTokens"" INTEGER NOT NULL DEFAULT 0,
+                ""OutputTokens"" INTEGER NOT NULL DEFAULT 0,
+                ""ModelUsed"" VARCHAR(100),
+                ""SourceDomain"" VARCHAR(500),
+                ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                ""UpdatedAt"" TIMESTAMP WITH TIME ZONE,
+                ""DeletedAt"" TIMESTAMP WITH TIME ZONE,
+                ""IsDeleted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                ""Version"" BYTEA
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_ChatLogs_AppId"" ON ""ChatLogs"" (""AppId"")");
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_ChatLogs_CreatedAt"" ON ""ChatLogs"" (""CreatedAt"")");
 
         // Add Description column if not exists
         await ctx.Database.ExecuteSqlRawAsync(@"
