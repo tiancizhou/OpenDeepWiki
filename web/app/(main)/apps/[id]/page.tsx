@@ -169,13 +169,17 @@ export default function AppDetailPage() {
     return `<script
   src="${baseUrl}/embed.js"
   data-app-id="${app.appId}"${app.iconUrl ? `\n  data-icon="${app.iconUrl}"` : ""}
+  data-user-token="学员端token"
+  data-welcome-title="你好！"
+  data-welcome-subtitle="有什么可以帮助你的吗？"
+  data-suggested-questions='["查看我的学习情况","查看我的考试情况","查看我的培训情况"]'
 ></script>`;
   };
 
   const getEmbedTokenScript = () => {
     return `<script>
-  // 可选：如果绑定的 MCP 需要当前登录用户身份，请在用户登录后设置。
-  window.OpenDeepWiki?.setUserToken(currentUserToken);
+  // 可选：如果 token 是页面加载后才拿到，可以用这种方式动态更新。
+  // window.OpenDeepWiki?.setUserToken(currentUserToken);
 
   // 可选：按当前页面、用户角色动态配置欢迎语和快捷问题。
   // window.OpenDeepWiki?.configure({
