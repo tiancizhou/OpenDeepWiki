@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useTranslations } from "next-intl"
-import { X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
+import { ChevronLeft, ChevronRight, X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
@@ -139,6 +139,7 @@ export function EmbedChatWidget({
 }: EmbedChatWidgetProps) {
   const t = useTranslations("chat")
   const [isOpen, setIsOpen] = React.useState(false)
+  const [isLauncherCollapsed, setIsLauncherCollapsed] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isEnabled, setIsEnabled] = React.useState(false)
   const [config, setConfig] = React.useState<EmbedConfig | null>(null)
@@ -554,34 +555,57 @@ export function EmbedChatWidget({
       `}</style>
 
       {/* 悬浮球 */}
-      {!isOpen && (
+      {!isOpen && !isLauncherCollapsed && (
+        <>
+          <button
+            type="button"
+            onClick={handleToggle}
+            className={cn(
+              "fixed z-[99999] flex items-center justify-center overflow-hidden",
+              "h-[72px] w-[72px] rounded-full",
+              "bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600",
+              "text-white shadow-[0_16px_34px_rgba(37,99,235,0.34),0_4px_12px_rgba(15,23,42,0.18)]",
+              "transition-all duration-200 ease-in-out",
+              "hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_20px_42px_rgba(37,99,235,0.42),0_8px_18px_rgba(15,23,42,0.22)]",
+              "active:scale-95",
+              "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
+              "before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-blue-600/30 before:content-[''] before:animate-[odw-assistant-pulse_2.2s_ease-out_infinite]",
+              getPositionClasses()
+            )}
+            aria-label={t("assistant.title")}
+            aria-expanded={false}
+          >
+            {iconUrl ? (
+              <img
+                src={iconUrl}
+                alt={t("assistant.title")}
+                className="h-12 w-12 rounded-full object-cover"
+              />
+            ) : (
+              <AssistantAvatar />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsLauncherCollapsed(true)}
+            className="fixed bottom-[84px] right-[18px] z-[100000] flex h-6 w-6 items-center justify-center rounded-full border border-slate-300/70 bg-white/95 text-slate-600 shadow-lg transition hover:-translate-y-0.5 hover:bg-white"
+            aria-label="收起对话助手图标"
+            title="收起"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </>
+      )}
+
+      {!isOpen && isLauncherCollapsed && (
         <button
           type="button"
-          onClick={handleToggle}
-          className={cn(
-            "fixed z-[99999] flex items-center justify-center overflow-hidden",
-            "h-[72px] w-[72px] rounded-full",
-            "bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600",
-            "text-white shadow-[0_16px_34px_rgba(37,99,235,0.34),0_4px_12px_rgba(15,23,42,0.18)]",
-            "transition-all duration-200 ease-in-out",
-            "hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_20px_42px_rgba(37,99,235,0.42),0_8px_18px_rgba(15,23,42,0.22)]",
-            "active:scale-95",
-            "focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2",
-            "before:absolute before:-inset-[7px] before:rounded-full before:border-2 before:border-blue-600/30 before:content-[''] before:animate-[odw-assistant-pulse_2.2s_ease-out_infinite]",
-            getPositionClasses()
-          )}
-          aria-label={t("assistant.title")}
-          aria-expanded={false}
+          onClick={() => setIsLauncherCollapsed(false)}
+          className="fixed bottom-[42px] right-0 z-[99999] flex h-[70px] w-7 items-center justify-center rounded-l-full bg-gradient-to-br from-emerald-400 via-blue-600 to-violet-600 text-white shadow-[0_10px_24px_rgba(37,99,235,0.32)] transition hover:-translate-x-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          aria-label="展开对话助手图标"
+          title="展开"
         >
-          {iconUrl ? (
-            <img
-              src={iconUrl}
-              alt={t("assistant.title")}
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          ) : (
-            <AssistantAvatar />
-          )}
+          <ChevronLeft className="h-5 w-5" />
         </button>
       )}
 

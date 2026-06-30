@@ -70,7 +70,8 @@
     startX: 0,
     startWidth: 400,
     appConfig: null,
-    messages: []
+    messages: [],
+    isLauncherCollapsed: false
   };
 
   // 样式定义
@@ -110,6 +111,42 @@
       'z-index: 999999'
     ].join(';'),
     floatingBallHover: 'transform: translateY(-3px) scale(1.06); box-shadow: 0 20px 42px rgba(37, 99, 235, 0.42), 0 8px 18px rgba(15, 23, 42, 0.22);',
+    launcherCollapseButton: [
+      'position: fixed',
+      'right: 18px',
+      'bottom: 84px',
+      'width: 24px',
+      'height: 24px',
+      'border-radius: 999px',
+      'border: 1px solid rgba(148, 163, 184, 0.45)',
+      'background: rgba(255, 255, 255, 0.96)',
+      'color: #475569',
+      'box-shadow: 0 6px 16px rgba(15, 23, 42, 0.18)',
+      'display: flex',
+      'align-items: center',
+      'justify-content: center',
+      'cursor: pointer',
+      'z-index: 1000000',
+      'transition: transform 0.2s ease, opacity 0.2s ease, background 0.2s ease'
+    ].join(';'),
+    launcherCollapsedTab: [
+      'position: fixed',
+      'right: 0',
+      'bottom: 42px',
+      'width: 28px',
+      'height: 70px',
+      'border: none',
+      'border-radius: 14px 0 0 14px',
+      'background: linear-gradient(145deg, #20d3a2 0%, #2563eb 62%, #7c3aed 100%)',
+      'color: #ffffff',
+      'box-shadow: 0 10px 24px rgba(37, 99, 235, 0.32)',
+      'display: none',
+      'align-items: center',
+      'justify-content: center',
+      'cursor: pointer',
+      'z-index: 999999',
+      'transition: transform 0.2s ease'
+    ].join(';'),
     panel: [
       'position: fixed',
       'top: 0',
@@ -624,6 +661,74 @@
     return ball;
   }
 
+  function renderLauncherCollapseButton(container) {
+    var button = createElement('button', {
+      id: 'odw-launcher-collapse',
+      style: styles.launcherCollapseButton,
+      'aria-label': '收起对话助手图标',
+      title: '收起',
+      onClick: function(event) {
+        event.stopPropagation();
+        setLauncherCollapsed(true);
+      },
+      onMouseenter: function() {
+        this.style.transform = 'translateY(-1px) scale(1.04)';
+        this.style.background = '#ffffff';
+      },
+      onMouseleave: function() {
+        this.style.transform = '';
+        this.style.background = 'rgba(255, 255, 255, 0.96)';
+      }
+    }, '<span style="font-size: 16px; line-height: 1;">›</span>');
+
+    container.appendChild(button);
+    return button;
+  }
+
+  function renderLauncherCollapsedTab(container) {
+    var tab = createElement('button', {
+      id: 'odw-launcher-tab',
+      style: styles.launcherCollapsedTab,
+      'aria-label': '展开对话助手图标',
+      title: '展开',
+      onClick: function() {
+        setLauncherCollapsed(false);
+      },
+      onMouseenter: function() {
+        this.style.transform = 'translateX(-2px)';
+      },
+      onMouseleave: function() {
+        this.style.transform = '';
+      }
+    }, '<span style="font-size: 20px; line-height: 1;">‹</span>');
+
+    container.appendChild(tab);
+    return tab;
+  }
+
+  function setLauncherCollapsed(collapsed) {
+    state.isLauncherCollapsed = collapsed;
+    updateLauncherVisibility();
+  }
+
+  function updateLauncherVisibility() {
+    var ball = document.getElementById('odw-floating-ball');
+    var collapseButton = document.getElementById('odw-launcher-collapse');
+    var collapsedTab = document.getElementById('odw-launcher-tab');
+
+    if (ball) {
+      ball.style.display = state.isOpen || state.isLauncherCollapsed ? 'none' : 'flex';
+    }
+
+    if (collapseButton) {
+      collapseButton.style.display = state.isOpen || state.isLauncherCollapsed ? 'none' : 'flex';
+    }
+
+    if (collapsedTab) {
+      collapsedTab.style.display = !state.isOpen && state.isLauncherCollapsed ? 'flex' : 'none';
+    }
+  }
+
   // 渲染背景遮罩
   function renderBackdrop(container) {
     var backdrop = createElement('div', {
@@ -801,13 +906,14 @@
     }
 
     if (ball) {
-      ball.style.display = state.isOpen ? 'none' : 'flex';
       ball.innerHTML = config.iconUrl
         ? '<img src="' + config.iconUrl + '" alt="Chat" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover;">'
         : icons.assistant;
       ball.setAttribute('data-open', state.isOpen ? 'true' : 'false');
       ball.setAttribute('aria-label', state.isOpen ? '关闭对话助手' : '打开对话助手');
     }
+
+    updateLauncherVisibility();
   }
 
   // 添加消息到UI
@@ -1226,6 +1332,9 @@
       renderBackdrop(container);
       renderPanel(container);
       renderFloatingBall(container);
+      renderLauncherCollapseButton(container);
+      renderLauncherCollapsedTab(container);
+      updateLauncherVisibility();
 
       console.log('[OpenDeepWiki] 初始化成功');
     });
