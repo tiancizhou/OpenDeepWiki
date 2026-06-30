@@ -1,14 +1,12 @@
 "use client"
 
+import { useParams } from "next/navigation"
 import { EmbedChatWidget } from "@/components/chat/embed-chat-widget"
 
-interface PublicAppPageProps {
-  params: {
-    appId: string
-  }
-}
+export default function PublicAppPage() {
+  const params = useParams<{ appId: string }>()
+  const appId = params.appId
 
-export default function PublicAppPage({ params }: PublicAppPageProps) {
   return (
     <main className="min-h-screen bg-[#f4f6f8] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-5xl flex-col">
@@ -20,7 +18,7 @@ export default function PublicAppPage({ params }: PublicAppPageProps) {
         </div>
         <section className="min-h-0 flex-1">
           <EmbedChatWidget
-            appId={params.appId}
+            appId={appId}
             mode="inline"
             welcomeTitle="你好！"
             welcomeSubtitle="有什么可以帮助你的吗？"
