@@ -24,7 +24,24 @@ goto :end
 
 :env_ok
 set "TARGET=%~2"
-if "%TARGET%"=="" set "TARGET=all"
+if "%TARGET%"=="" goto :select_target
+goto :validate_target
+
+:select_target
+echo.
+echo Select build target:
+echo   [1] all      - backend + web + postgres
+echo   [2] backend  - backend image only
+echo   [3] web      - web image only
+echo   [4] postgres - postgres image only
+echo.
+choice /C 1234 /N /M "Choose target [1-4]: "
+if errorlevel 4 set "TARGET=postgres" & goto :validate_target
+if errorlevel 3 set "TARGET=web" & goto :validate_target
+if errorlevel 2 set "TARGET=backend" & goto :validate_target
+set "TARGET=all"
+
+:validate_target
 if "%TARGET%"=="all" goto :target_ok
 if "%TARGET%"=="web" goto :target_ok
 if "%TARGET%"=="backend" goto :target_ok
@@ -44,6 +61,11 @@ echo   Target: %TARGET%
 echo   Backend: %BACKEND_REMOTE_IMAGE%
 echo   Web:     %WEB_REMOTE_IMAGE%
 echo   Postgres:%POSTGRES_REMOTE_IMAGE%
+echo ========================================
+echo Usage:
+echo   build.bat test web       ^(web only^)
+echo   build.bat test backend   ^(backend only^)
+echo   build.bat test all       ^(all images^)
 echo ========================================
 
 echo [1] Logging in to registry ...
