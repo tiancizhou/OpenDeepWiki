@@ -632,47 +632,51 @@ public class EmbedService : IEmbedService
         var cachedInputTokens = usageSnapshot.CachedInputTokens;
         var cacheCreationInputTokens = usageSnapshot.CacheCreationInputTokens;
 
-        // Record statistics
-        await _statisticsService.RecordRequestAsync(new RecordRequestDto
-        {
-            AppId = request.AppId,
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens
-        }, cancellationToken);
-
-        await RecordTokenUsageAsync(
-            inputTokens,
-            outputTokens,
-            cachedInputTokens,
-            cacheCreationInputTokens,
-            resolvedModel,
-            knowledgeContext.Owner,
-            knowledgeContext.Repo,
-            cancellationToken);
-
-        // Record chat log
-        var answerSummary = responseBuilder.Length > 500
-            ? responseBuilder.ToString(0, 500) + "..."
-            : responseBuilder.ToString();
-
-        await _chatLogService.RecordChatLogAsync(new RecordChatLogDto
-        {
-            AppId = request.AppId,
-            UserIdentifier = request.UserIdentifier,
-            Question = question,
-            AnswerSummary = answerSummary,
-            InputTokens = inputTokens,
-            OutputTokens = outputTokens,
-            ModelUsed = modelId,
-            SourceDomain = sourceDomain
-        }, cancellationToken);
-
-        // Send done event
         yield return new SSEEvent
         {
             Type = SSEEventType.Done,
             Data = new { inputTokens, outputTokens, cachedInputTokens, cacheCreationInputTokens }
         };
+
+        try
+        {
+            await _statisticsService.RecordRequestAsync(new RecordRequestDto
+            {
+                AppId = request.AppId,
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens
+            }, CancellationToken.None);
+
+            await RecordTokenUsageAsync(
+                inputTokens,
+                outputTokens,
+                cachedInputTokens,
+                cacheCreationInputTokens,
+                resolvedModel,
+                knowledgeContext.Owner,
+                knowledgeContext.Repo,
+                CancellationToken.None);
+
+            var answerSummary = responseBuilder.Length > 500
+                ? responseBuilder.ToString(0, 500) + "..."
+                : responseBuilder.ToString();
+
+            await _chatLogService.RecordChatLogAsync(new RecordChatLogDto
+            {
+                AppId = request.AppId,
+                UserIdentifier = request.UserIdentifier,
+                Question = question,
+                AnswerSummary = answerSummary,
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens,
+                ModelUsed = modelId,
+                SourceDomain = sourceDomain
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record embedded chat telemetry for app {AppId}", request.AppId);
+        }
     }
 
     private static Dictionary<string, object>? TryParseToolArguments(string json)
