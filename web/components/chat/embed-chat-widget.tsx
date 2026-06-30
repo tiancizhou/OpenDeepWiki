@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils"
 export interface EmbedChatWidgetProps {
   /** 应用ID */
   appId: string
+  /** 展示模式 */
+  mode?: 'floating' | 'inline'
   /** 自定义图标URL */
   iconUrl?: string
   /** 位置 */
@@ -129,6 +131,7 @@ function AssistantAvatar() {
  */
 export function EmbedChatWidget({
   appId,
+  mode = 'floating',
   iconUrl: propIconUrl,
   position = 'bottom-right',
   theme = 'light',
@@ -138,7 +141,7 @@ export function EmbedChatWidget({
   suggestedQuestions = [],
 }: EmbedChatWidgetProps) {
   const t = useTranslations("chat")
-  const [isOpen, setIsOpen] = React.useState(false)
+  const [isOpen, setIsOpen] = React.useState(mode === 'inline')
   const [isLauncherCollapsed, setIsLauncherCollapsed] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(true)
   const [isEnabled, setIsEnabled] = React.useState(false)
@@ -212,8 +215,9 @@ export function EmbedChatWidget({
 
   // 切换面板
   const handleToggle = React.useCallback(() => {
+    if (mode === 'inline') return
     setIsOpen(prev => !prev)
-  }, [])
+  }, [mode])
 
   // 清空对话
   const handleClear = React.useCallback(() => {
@@ -521,12 +525,232 @@ export function EmbedChatWidget({
   }
 
   // 加载中或未启用时不显示
-  if (isLoading || !isEnabled) {
+  if (isLoading) {
+    if (mode === 'inline') {
+      return (
+        <div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border bg-white text-sm text-slate-500">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          正在加载助手...
+        </div>
+      )
+    }
+    return null
+  }
+
+  if (!isEnabled) {
+    if (mode === 'inline') {
+      return (
+        <div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border bg-white px-6 text-center text-sm text-slate-500">
+          当前应用不可用，请检查应用状态或访问域名配置。
+        </div>
+      )
+    }
     return null
   }
 
   const isDark = theme === 'dark'
   const canSend = input.trim() && !isSending
+
+  const renderChatPanel = (inline = false) => (
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden",
+        inline
+          ? "h-full min-h-[560px] w-full rounded-lg border border-slate-200 bg-white shadow-sm"
+          : cn(
+              "fixed z-[99998]",
+              "w-[380px] h-[600px] max-h-[calc(100vh-120px)]",
+              "rounded-xl shadow-2xl",
+              "transition-all duration-300 ease-in-out",
+              isDark ? "bg-gray-900 text-white" : "bg-white text-gray-900",
+              getPanelPositionClasses()
+            )
+      )}
+    >
+      {/* 头部 */}
+      <div
+        className={cn(
+          "flex items-center justify-between border-b px-4 py-3",
+          isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="truncate font-semibold">
+            {config?.appName || t("embed.title")}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleClear}
+            disabled={messages.length === 0}
+            className={cn(
+              "rounded p-1.5 transition-colors",
+              isDark
+                ? "hover:bg-gray-700 disabled:opacity-50"
+                : "hover:bg-gray-200 disabled:opacity-50"
+            )}
+            title={t("panel.clearHistory")}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+          {!inline && (
+            <button
+              type="button"
+              onClick={handleToggle}
+              className={cn(
+                "rounded p-1.5 transition-colors",
+                isDark ? "hover:bg-gray-700" : "hover:bg-gray-200"
+              )}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 消息列表 */}
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center px-4 text-center text-gray-500">
+            <div className="mb-3 text-4xl">👋</div>
+            <div className="mb-2 text-lg font-semibold text-gray-700">
+              {welcomeTitle || t("embed.greeting")}
+            </div>
+            <div className="text-sm">{welcomeSubtitle || t("embed.greetingSubtitle")}</div>
+            {suggestedQuestions.length > 0 && (
+              <div className="mt-7 flex w-full max-w-[360px] flex-col gap-2.5">
+                {suggestedQuestions.slice(0, 6).map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    disabled={isSending}
+                    onClick={() => handleQuickQuestion(question)}
+                    className={cn(
+                      "rounded-md border border-transparent px-2 py-1 text-center text-lg font-medium leading-snug text-red-500",
+                      "transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-50",
+                      "disabled:cursor-not-allowed disabled:opacity-60",
+                      isDark && "text-red-300 hover:border-red-900/60 hover:bg-red-950/30"
+                    )}
+                  >
+                    {question}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={cn(
+                "break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                message.role === 'user'
+                  ? "ml-auto max-w-[80%] rounded-br-sm bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
+                  : cn(
+                      "mr-auto max-w-[92%] rounded-bl-sm",
+                      isDark ? "bg-gray-700 text-gray-100" : "bg-gray-100 text-gray-900"
+                    )
+              )}
+            >
+              {message.role === 'assistant' && !message.content && isSending ? (
+                <div className="flex items-center gap-1">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }} />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }} />
+                </div>
+              ) : (
+                <MessageContent content={message.content} isDark={isDark} />
+              )}
+            </div>
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* 错误提示 */}
+      {error && (
+        <div className="mx-4 mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+          <div className="flex items-center justify-between gap-3">
+            <span>{error.message}</span>
+            <div className="flex shrink-0 items-center gap-2">
+              {error.retryable && lastRequest && (
+                <button
+                  className="flex items-center gap-1 underline hover:no-underline"
+                  onClick={handleRetry}
+                  disabled={isSending}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  {t("panel.retry")}
+                </button>
+              )}
+              <button
+                className="underline hover:no-underline"
+                onClick={() => setError(null)}
+              >
+                {t("panel.closeError")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 输入区域 */}
+      <div
+        className={cn(
+          "flex items-end gap-2 border-t p-4",
+          isDark ? "border-gray-700" : "border-gray-200"
+        )}
+      >
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={t("embed.inputPlaceholder")}
+          rows={1}
+          disabled={isSending}
+          className={cn(
+            "min-h-[40px] max-h-[120px] flex-1 resize-none rounded-lg border px-3 py-2.5 text-sm",
+            "focus:outline-none focus:ring-2 focus:ring-indigo-500",
+            isDark
+              ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400"
+              : "bg-white border-gray-300 placeholder-gray-500"
+          )}
+          style={{
+            height: 'auto',
+            minHeight: '40px',
+          }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement
+            target.style.height = 'auto'
+            target.style.height = Math.min(target.scrollHeight, 120) + 'px'
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => void handleSend()}
+          disabled={!canSend}
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            "bg-gradient-to-br from-indigo-500 to-purple-600 text-white",
+            "transition-opacity",
+            canSend ? "opacity-100" : "cursor-not-allowed opacity-50"
+          )}
+        >
+          {isSending ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Send className="h-5 w-5" />
+          )}
+        </button>
+      </div>
+    </div>
+  )
+
+  if (mode === 'inline') {
+    return renderChatPanel(true)
+  }
 
   return (
     <>
@@ -610,196 +834,7 @@ export function EmbedChatWidget({
       )}
 
       {/* 对话面板 */}
-      {isOpen && (
-        <div
-          className={cn(
-            "fixed z-[99998] flex flex-col",
-            "w-[380px] h-[600px] max-h-[calc(100vh-120px)]",
-            "rounded-xl shadow-2xl overflow-hidden",
-            "transition-all duration-300 ease-in-out",
-            isDark ? "bg-gray-900 text-white" : "bg-white text-gray-900",
-            getPanelPositionClasses()
-          )}
-        >
-          {/* 头部 */}
-          <div
-            className={cn(
-              "flex items-center justify-between px-4 py-3 border-b",
-              isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"
-            )}
-          >
-            <div className="flex items-center gap-3">
-              <span className="font-semibold">
-                {config?.appName || t("embed.title")}
-              </span>
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={handleClear}
-                disabled={messages.length === 0}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  isDark 
-                    ? "hover:bg-gray-700 disabled:opacity-50" 
-                    : "hover:bg-gray-200 disabled:opacity-50"
-                )}
-                title={t("panel.clearHistory")}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={handleToggle}
-                className={cn(
-                  "p-1.5 rounded transition-colors",
-                  isDark ? "hover:bg-gray-700" : "hover:bg-gray-200"
-                )}
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* 消息列表 */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {messages.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center px-4 text-center text-gray-500">
-                <div className="mb-3 text-4xl">👋</div>
-                <div className="mb-2 text-lg font-semibold text-gray-700">
-                  {welcomeTitle || t("embed.greeting")}
-                </div>
-                <div className="text-sm">{welcomeSubtitle || t("embed.greetingSubtitle")}</div>
-                {suggestedQuestions.length > 0 && (
-                  <div className="mt-7 flex w-full max-w-[300px] flex-col gap-2.5">
-                    {suggestedQuestions.slice(0, 6).map((question) => (
-                      <button
-                        key={question}
-                        type="button"
-                        disabled={isSending}
-                        onClick={() => handleQuickQuestion(question)}
-                        className={cn(
-                          "rounded-md border border-transparent px-2 py-1 text-center text-lg font-medium leading-snug text-red-500",
-                          "transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-50",
-                          "disabled:cursor-not-allowed disabled:opacity-60",
-                          isDark && "text-red-300 hover:border-red-900/60 hover:bg-red-950/30"
-                        )}
-                      >
-                        {question}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={cn(
-                    "px-4 py-2.5 rounded-2xl text-sm leading-relaxed break-words",
-                    message.role === 'user'
-                      ? "ml-auto max-w-[80%] bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-br-sm"
-                      : cn(
-                          "mr-auto max-w-[92%] rounded-bl-sm",
-                          isDark ? "bg-gray-700 text-gray-100" : "bg-gray-100 text-gray-900"
-                        )
-                  )}
-                >
-                  {message.role === 'assistant' && !message.content && isSending ? (
-                    <div className="flex items-center gap-1">
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  ) : (
-                    <MessageContent content={message.content} isDark={isDark} />
-                  )}
-                </div>
-              ))
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* 错误提示 */}
-          {error && (
-            <div className="mx-4 mb-2 px-3 py-2 bg-red-50 text-red-600 text-sm rounded-lg">
-              <div className="flex items-center justify-between">
-                <span>{error.message}</span>
-                <div className="flex items-center gap-2">
-                  {error.retryable && lastRequest && (
-                    <button
-                      className="flex items-center gap-1 underline hover:no-underline"
-                      onClick={handleRetry}
-                      disabled={isSending}
-                    >
-                      <RefreshCw className="h-3 w-3" />
-                      {t("panel.retry")}
-                    </button>
-                  )}
-                  <button
-                    className="underline hover:no-underline"
-                    onClick={() => setError(null)}
-                  >
-                    {t("panel.closeError")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 输入区域 */}
-          <div
-            className={cn(
-              "p-4 border-t flex items-end gap-2",
-              isDark ? "border-gray-700" : "border-gray-200"
-            )}
-          >
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={t("embed.inputPlaceholder")}
-              rows={1}
-              disabled={isSending}
-              className={cn(
-                "flex-1 min-h-[40px] max-h-[120px] px-3 py-2.5",
-                "border rounded-lg resize-none text-sm",
-                "focus:outline-none focus:ring-2 focus:ring-indigo-500",
-                isDark 
-                  ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400" 
-                  : "bg-white border-gray-300 placeholder-gray-500"
-              )}
-              style={{
-                height: 'auto',
-                minHeight: '40px',
-              }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement
-                target.style.height = 'auto'
-                target.style.height = Math.min(target.scrollHeight, 120) + 'px'
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => void handleSend()}
-              disabled={!canSend}
-              className={cn(
-                "w-10 h-10 flex items-center justify-center rounded-lg",
-                "bg-gradient-to-br from-indigo-500 to-purple-600 text-white",
-                "transition-opacity",
-                canSend ? "opacity-100" : "opacity-50 cursor-not-allowed"
-              )}
-            >
-              {isSending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Send className="h-5 w-5" />
-              )}
-            </button>
-          </div>
-        </div>
-      )}
+      {isOpen && renderChatPanel(false)}
     </>
   )
 }

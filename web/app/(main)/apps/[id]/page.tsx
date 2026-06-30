@@ -176,6 +176,11 @@ export default function AppDetailPage() {
 ></script>`;
   };
 
+  const getPublicAccessUrl = () => {
+    if (!app || typeof window === "undefined") return "";
+    return `${window.location.origin}/apps/public/${encodeURIComponent(app.appId)}`;
+  };
+
   const getEmbedTokenScript = () => {
     return `<script>
   // 可选：如果 token 是页面加载后才拿到，可以用这种方式动态更新。
@@ -346,6 +351,26 @@ export default function AppDetailPage() {
                 </pre>
               </div>
             )}
+
+            {/* Public Access Link */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {t("apps.detail.publicAccessLink")}
+              </label>
+              <p className="text-sm text-muted-foreground">
+                {t("apps.detail.publicAccessLinkHint")}
+              </p>
+              <div className="flex items-center gap-2">
+                <Input value={getPublicAccessUrl()} readOnly className="font-mono" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleCopy(getPublicAccessUrl())}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
 
             {/* Embed Script */}
             <div className="space-y-2">
