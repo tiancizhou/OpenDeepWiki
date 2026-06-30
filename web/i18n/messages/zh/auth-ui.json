@@ -18,6 +18,7 @@
   "loginDesc": "登录以访问你的知识库和私人仓库",
   "registerDesc": "注册以开始使用 OpenDeepWiki",
   "account": "账号或邮箱",
+  "accountPlaceholder": "请输入账号或邮箱",
   "email": "邮箱地址",
   "emailPlaceholder": "name@example.com",
   "password": "密码",
