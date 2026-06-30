@@ -556,7 +556,7 @@ export function EmbedChatWidget({
       className={cn(
         "flex flex-col overflow-hidden",
         inline
-          ? "h-full min-h-0 w-full rounded-lg border border-slate-200 bg-white shadow-sm"
+          ? "h-full min-h-0 w-full rounded-lg border border-sky-100 bg-white shadow-sm shadow-sky-100/70"
           : cn(
               "fixed z-[99998]",
               "w-[380px] h-[600px] max-h-[calc(100vh-120px)]",
@@ -571,11 +571,11 @@ export function EmbedChatWidget({
       <div
         className={cn(
           "flex shrink-0 items-center justify-between border-b px-5 py-4",
-          isDark ? "bg-gray-800 border-gray-700" : "bg-slate-50 border-slate-200"
+          isDark ? "bg-gray-800 border-gray-700" : "bg-gradient-to-r from-sky-50 via-white to-cyan-50 border-sky-100"
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-900 text-xs font-semibold text-white">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-sky-400 to-cyan-500 text-sm font-semibold text-white shadow-sm shadow-sky-200">
             AI
           </span>
           <div className="min-w-0">
@@ -583,7 +583,7 @@ export function EmbedChatWidget({
               {config?.appName || t("embed.title")}
             </div>
             {inline && (
-              <div className="mt-0.5 text-xs text-slate-500">
+              <div className="mt-0.5 text-xs text-sky-700/70">
                 当前对话仅保存在本次页面会话中
               </div>
             )}
@@ -598,7 +598,7 @@ export function EmbedChatWidget({
               "rounded p-1.5 transition-colors",
               isDark
                 ? "hover:bg-gray-700 disabled:opacity-50"
-                : "hover:bg-gray-200 disabled:opacity-50"
+                : "hover:bg-sky-100 disabled:opacity-50"
             )}
             title={t("panel.clearHistory")}
           >
@@ -623,7 +623,7 @@ export function EmbedChatWidget({
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-5">
         {messages.length === 0 ? (
           <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center px-4 text-center text-gray-500">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-3xl">👋</div>
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-sky-50 text-3xl shadow-inner shadow-sky-100">👋</div>
             <div className="mb-2 text-2xl font-semibold text-gray-800">
               {welcomeTitle || t("embed.greeting")}
             </div>
@@ -656,7 +656,7 @@ export function EmbedChatWidget({
               className={cn(
                 "break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                 message.role === 'user'
-                  ? "ml-auto max-w-[80%] rounded-br-sm bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
+                  ? "ml-auto max-w-[80%] rounded-br-sm bg-gradient-to-br from-sky-500 to-cyan-500 text-white"
                   : cn(
                       "mr-auto max-w-[92%] rounded-bl-sm",
                       isDark ? "bg-gray-700 text-gray-100" : "bg-gray-100 text-gray-900"
@@ -709,7 +709,7 @@ export function EmbedChatWidget({
       <div
         className={cn(
           "flex shrink-0 items-end gap-3 border-t p-4",
-          isDark ? "border-gray-700" : "border-slate-200 bg-slate-50"
+          isDark ? "border-gray-700" : "border-sky-100 bg-sky-50/70"
         )}
       >
         <textarea
@@ -722,10 +722,10 @@ export function EmbedChatWidget({
           disabled={isSending}
           className={cn(
             "min-h-[44px] max-h-[120px] flex-1 resize-none rounded-md border px-4 py-3 text-sm shadow-sm",
-            "focus:outline-none focus:ring-2 focus:ring-slate-400",
+            "focus:outline-none focus:ring-2 focus:ring-sky-300",
             isDark
               ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400"
-              : "bg-white border-slate-300 placeholder-slate-500"
+              : "bg-white border-sky-100 placeholder-slate-500"
           )}
           style={{
             height: 'auto',
@@ -743,8 +743,8 @@ export function EmbedChatWidget({
           disabled={!canSend}
           className={cn(
             "flex h-11 w-11 shrink-0 items-center justify-center rounded-md",
-            "bg-slate-900 text-white shadow-sm",
-            "transition hover:-translate-y-0.5 hover:bg-slate-800",
+            "bg-gradient-to-br from-sky-400 to-cyan-500 text-white shadow-sm shadow-sky-200",
+            "transition hover:-translate-y-0.5 hover:from-sky-500 hover:to-cyan-600",
             canSend ? "opacity-100" : "cursor-not-allowed opacity-50"
           )}
         >
