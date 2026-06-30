@@ -9,6 +9,9 @@
  *   data-app-id="app_xxxxx"
  *   data-icon="https://example.com/icon.png"
  *   data-user-token="current-user-token"
+ *   data-welcome-title="你好！"
+ *   data-welcome-subtitle="有什么可以帮助你的吗？"
+ *   data-suggested-questions='["查看我的学习情况","查看我的考试情况"]'
  * ></script>
  * 
  * Requirements: 14.2, 14.3, 14.4, 14.7
@@ -29,6 +32,9 @@
   var position = script.getAttribute('data-position') || 'bottom-right';
   var theme = script.getAttribute('data-theme') || 'light';
   var userToken = script.getAttribute('data-user-token') || '';
+  var welcomeTitle = script.getAttribute('data-welcome-title') || '';
+  var welcomeSubtitle = script.getAttribute('data-welcome-subtitle') || '';
+  var suggestedQuestions = parseSuggestedQuestions(script.getAttribute('data-suggested-questions'));
 
   // 验证必需参数
   if (!appId) {
@@ -49,7 +55,10 @@
     position: position,
     theme: theme,
     apiBaseUrl: apiBaseUrl,
-    userToken: userToken
+    userToken: userToken,
+    welcomeTitle: welcomeTitle,
+    welcomeSubtitle: welcomeSubtitle,
+    suggestedQuestions: suggestedQuestions
   };
 
   // 状态
@@ -198,8 +207,36 @@
     welcomeMessage: [
       'text-align: center',
       'color: #6b7280',
-      'padding: 40px 20px'
+      'padding: 56px 20px',
+      'display: flex',
+      'flex-direction: column',
+      'align-items: center',
+      'justify-content: center',
+      'min-height: 360px'
     ].join(';'),
+    quickPromptList: [
+      'margin-top: 28px',
+      'display: flex',
+      'flex-direction: column',
+      'gap: 10px',
+      'align-items: stretch',
+      'width: min(300px, 100%)'
+    ].join(';'),
+    quickPromptButton: [
+      'border: 1px solid transparent',
+      'background: transparent',
+      'color: #ef4444',
+      'font-size: 18px',
+      'line-height: 1.45',
+      'font-weight: 500',
+      'padding: 3px 8px',
+      'border-radius: 8px',
+      'cursor: pointer',
+      'text-align: center',
+      'transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease'
+    ].join(';'),
+    quickPromptButtonDark: 'color: #fca5a5;',
+    quickPromptButtonHover: 'background: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.18); transform: translateY(-1px);',
     errorMessage: [
       'padding: 12px 16px',
       'background: #fef2f2',
@@ -291,6 +328,90 @@
   // 生成唯一ID
   function generateId() {
     return 'odw-' + Math.random().toString(36).substr(2, 9);
+  }
+
+  function parseSuggestedQuestions(rawValue) {
+    if (!rawValue || !rawValue.trim()) {
+      return [];
+    }
+
+    try {
+      var parsed = JSON.parse(rawValue);
+      if (Array.isArray(parsed)) {
+        return normalizeSuggestedQuestions(parsed);
+      }
+    } catch (error) {
+      // Fall back to delimiter parsing below.
+    }
+
+    return normalizeSuggestedQuestions(rawValue.split(/\n|\|/));
+  }
+
+  function normalizeSuggestedQuestions(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    var seen = {};
+    var result = [];
+    value.forEach(function(item) {
+      if (typeof item !== 'string') {
+        return;
+      }
+
+      var text = item.trim();
+      if (!text || seen[text]) {
+        return;
+      }
+
+      seen[text] = true;
+      result.push(text);
+    });
+
+    return result.slice(0, 6);
+  }
+
+  function resolveWelcomeTitle() {
+    return config.welcomeTitle || '你好！';
+  }
+
+  function resolveWelcomeSubtitle() {
+    return config.welcomeSubtitle || '有什么可以帮助你的吗？';
+  }
+
+  function renderWelcomeMessage() {
+    var isDark = config.theme === 'dark';
+    var children = [
+      createElement('div', { style: 'font-size: 28px; margin-bottom: 12px;' }, '👋'),
+      createElement('div', { style: 'font-weight: 700; font-size: 18px; margin-bottom: 8px; color: ' + (isDark ? '#e5e7eb' : '#374151') + ';' }, escapeHtml(resolveWelcomeTitle())),
+      createElement('div', { style: 'font-size: 15px; color: ' + (isDark ? '#9ca3af' : '#6b7280') + ';' }, escapeHtml(resolveWelcomeSubtitle()))
+    ];
+
+    if (config.suggestedQuestions.length > 0) {
+      var promptButtons = config.suggestedQuestions.map(function(question) {
+        var baseStyle = styles.quickPromptButton + (isDark ? ';' + styles.quickPromptButtonDark : '');
+        return createElement('button', {
+          type: 'button',
+          style: baseStyle,
+          onClick: function() {
+            sendQuickQuestion(question);
+          },
+          onMouseenter: function() {
+            this.style.cssText = baseStyle + ';' + styles.quickPromptButtonHover;
+          },
+          onMouseleave: function() {
+            this.style.cssText = baseStyle;
+          }
+        }, escapeHtml(question));
+      });
+
+      children.push(createElement('div', { style: styles.quickPromptList }, promptButtons));
+    }
+
+    return createElement('div', {
+      id: 'odw-welcome',
+      style: styles.welcomeMessage
+    }, children);
   }
 
   // 创建DOM元素
@@ -606,13 +727,7 @@
     });
     
     // 欢迎消息
-    messagesContainer.appendChild(createElement('div', {
-      style: styles.welcomeMessage
-    }, [
-      createElement('div', { style: 'font-size: 24px; margin-bottom: 8px;' }, '👋'),
-      createElement('div', { style: 'font-weight: 500; margin-bottom: 4px;' }, '你好！'),
-      createElement('div', { style: 'font-size: 14px;' }, '有什么可以帮助你的吗？')
-    ]));
+    messagesContainer.appendChild(renderWelcomeMessage());
     
     panel.appendChild(messagesContainer);
 
@@ -701,7 +816,8 @@
     if (!messagesContainer) return;
 
     // 移除欢迎消息
-    var welcomeMsg = messagesContainer.querySelector('[style*="text-align: center"]');
+    var welcomeMsg = document.getElementById('odw-welcome') ||
+      messagesContainer.querySelector('[style*="text-align: center"]');
     if (welcomeMsg) {
       welcomeMsg.remove();
     }
@@ -861,6 +977,27 @@
         }
       }
     );
+  }
+
+  function sendQuickQuestion(question) {
+    var input = document.getElementById('odw-input');
+    if (!input || input.disabled) return;
+
+    input.value = question;
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    input.focus();
+    sendMessage();
+  }
+
+  function updateWelcomeMessage() {
+    var messagesContainer = document.getElementById('odw-messages');
+    var welcomeMsg = document.getElementById('odw-welcome');
+    if (!messagesContainer || !welcomeMsg || state.messages.length > 0) {
+      return;
+    }
+
+    welcomeMsg.replaceWith(renderWelcomeMessage());
   }
 
   // HTML转义
@@ -1118,6 +1255,25 @@
         input.value = content;
         sendMessage();
       }
+    },
+    configure: function(options) {
+      if (!options || typeof options !== 'object') {
+        return;
+      }
+
+      if (typeof options.welcomeTitle === 'string') {
+        config.welcomeTitle = options.welcomeTitle.trim();
+      }
+
+      if (typeof options.welcomeSubtitle === 'string') {
+        config.welcomeSubtitle = options.welcomeSubtitle.trim();
+      }
+
+      if (Array.isArray(options.suggestedQuestions)) {
+        config.suggestedQuestions = normalizeSuggestedQuestions(options.suggestedQuestions);
+      }
+
+      updateWelcomeMessage();
     },
     setUserToken: function(token) {
       config.userToken = token || '';

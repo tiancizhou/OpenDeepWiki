@@ -19,6 +19,12 @@ export interface EmbedChatWidgetProps {
   theme?: 'light' | 'dark'
   /** API基础URL */
   apiBaseUrl?: string
+  /** 欢迎标题 */
+  welcomeTitle?: string
+  /** 欢迎副标题 */
+  welcomeSubtitle?: string
+  /** 快捷问题 */
+  suggestedQuestions?: string[]
 }
 
 /**
@@ -127,6 +133,9 @@ export function EmbedChatWidget({
   position = 'bottom-right',
   theme = 'light',
   apiBaseUrl = '',
+  welcomeTitle,
+  welcomeSubtitle,
+  suggestedQuestions = [],
 }: EmbedChatWidgetProps) {
   const t = useTranslations("chat")
   const [isOpen, setIsOpen] = React.useState(false)
@@ -242,8 +251,8 @@ export function EmbedChatWidget({
   }
 
   // 发送消息
-  const handleSend = React.useCallback(async () => {
-    const content = input.trim()
+  const handleSend = React.useCallback(async (overrideContent?: string) => {
+    const content = (overrideContent ?? input).trim()
     if (!content || isSending) return
 
     setError(null)
@@ -463,6 +472,11 @@ export function EmbedChatWidget({
     abortControllerRef.current = null
   }, [input, isSending, messages, appId, apiBaseUrl])
 
+  const handleQuickQuestion = React.useCallback((question: string) => {
+    if (!question.trim() || isSending) return
+    void handleSend(question)
+  }, [handleSend, isSending])
+
   // 重试发送
   const handleRetry = React.useCallback(() => {
     if (!lastRequest) return
@@ -472,14 +486,14 @@ export function EmbedChatWidget({
     setError(null)
     
     // 重新发送
-    handleSend()
+    void handleSend(lastRequest.content)
   }, [lastRequest, handleSend])
 
   // 处理键盘事件
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
@@ -626,10 +640,32 @@ export function EmbedChatWidget({
           {/* 消息列表 */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-                <div className="text-4xl mb-2">👋</div>
-                <div className="font-medium mb-1">{t("embed.greeting")}</div>
-                <div className="text-sm">{t("embed.greetingSubtitle")}</div>
+              <div className="flex h-full flex-col items-center justify-center px-4 text-center text-gray-500">
+                <div className="mb-3 text-4xl">👋</div>
+                <div className="mb-2 text-lg font-semibold text-gray-700">
+                  {welcomeTitle || t("embed.greeting")}
+                </div>
+                <div className="text-sm">{welcomeSubtitle || t("embed.greetingSubtitle")}</div>
+                {suggestedQuestions.length > 0 && (
+                  <div className="mt-7 flex w-full max-w-[300px] flex-col gap-2.5">
+                    {suggestedQuestions.slice(0, 6).map((question) => (
+                      <button
+                        key={question}
+                        type="button"
+                        disabled={isSending}
+                        onClick={() => handleQuickQuestion(question)}
+                        className={cn(
+                          "rounded-md border border-transparent px-2 py-1 text-center text-lg font-medium leading-snug text-red-500",
+                          "transition hover:-translate-y-0.5 hover:border-red-200 hover:bg-red-50",
+                          "disabled:cursor-not-allowed disabled:opacity-60",
+                          isDark && "text-red-300 hover:border-red-900/60 hover:bg-red-950/30"
+                        )}
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : (
               messages.map((message) => (
@@ -722,7 +758,7 @@ export function EmbedChatWidget({
             />
             <button
               type="button"
-              onClick={handleSend}
+              onClick={() => void handleSend()}
               disabled={!canSend}
               className={cn(
                 "w-10 h-10 flex items-center justify-center rounded-lg",

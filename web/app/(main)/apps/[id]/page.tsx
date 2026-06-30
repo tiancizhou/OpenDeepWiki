@@ -176,6 +176,17 @@ export default function AppDetailPage() {
     return `<script>
   // 可选：如果绑定的 MCP 需要当前登录用户身份，请在用户登录后设置。
   window.OpenDeepWiki?.setUserToken(currentUserToken);
+
+  // 可选：按当前页面、用户角色动态配置欢迎语和快捷问题。
+  // window.OpenDeepWiki?.configure({
+  //   welcomeTitle: "你好！",
+  //   welcomeSubtitle: "有什么可以帮助你的吗？",
+  //   suggestedQuestions: [
+  //     "查看我的学习情况",
+  //     "查看我的考试情况",
+  //     "查看我的培训情况"
+  //   ]
+  // });
 </script>`;
   };
 
