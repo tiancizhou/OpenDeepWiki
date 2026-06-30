@@ -8,14 +8,26 @@ export default function PublicAppPage() {
   const appId = params.appId
 
   return (
-    <main className="min-h-screen bg-[#f4f6f8] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-      <div className="mx-auto flex min-h-[calc(100vh-48px)] w-full max-w-5xl flex-col">
-        <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-4">
-          <div>
-            <h1 className="text-xl font-semibold tracking-normal">智能问答助手</h1>
-            <p className="mt-1 text-sm text-slate-500">独立访问页面，用于应用测试与业务验证。</p>
+    <main className="h-screen overflow-hidden bg-[#eef2f5] text-slate-950">
+      <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+        <header className="mb-3 flex shrink-0 items-center justify-between rounded-lg border border-slate-200 bg-white px-5 py-4 shadow-sm">
+          <div className="min-w-0">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-slate-900 text-sm font-semibold text-white">
+                AI
+              </span>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-semibold tracking-normal">智能问答助手</h1>
+                <p className="mt-0.5 truncate text-sm text-slate-500">独立访问页面，用于应用测试与业务验证。</p>
+              </div>
+            </div>
           </div>
-        </div>
+          <div className="hidden items-center gap-2 text-sm text-slate-500 sm:flex">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            <span>在线测试</span>
+          </div>
+        </header>
+
         <section className="min-h-0 flex-1">
           <EmbedChatWidget
             appId={appId}

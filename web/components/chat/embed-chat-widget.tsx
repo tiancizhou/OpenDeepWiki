@@ -556,7 +556,7 @@ export function EmbedChatWidget({
       className={cn(
         "flex flex-col overflow-hidden",
         inline
-          ? "h-full min-h-[560px] w-full rounded-lg border border-slate-200 bg-white shadow-sm"
+          ? "h-full min-h-0 w-full rounded-lg border border-slate-200 bg-white shadow-sm"
           : cn(
               "fixed z-[99998]",
               "w-[380px] h-[600px] max-h-[calc(100vh-120px)]",
@@ -570,14 +570,24 @@ export function EmbedChatWidget({
       {/* 头部 */}
       <div
         className={cn(
-          "flex items-center justify-between border-b px-4 py-3",
-          isDark ? "bg-gray-800 border-gray-700" : "bg-gray-50 border-gray-200"
+          "flex shrink-0 items-center justify-between border-b px-5 py-4",
+          isDark ? "bg-gray-800 border-gray-700" : "bg-slate-50 border-slate-200"
         )}
       >
         <div className="flex min-w-0 items-center gap-3">
-          <span className="truncate font-semibold">
-            {config?.appName || t("embed.title")}
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-slate-900 text-xs font-semibold text-white">
+            AI
           </span>
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold">
+              {config?.appName || t("embed.title")}
+            </div>
+            {inline && (
+              <div className="mt-0.5 text-xs text-slate-500">
+                当前对话仅保存在本次页面会话中
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -610,14 +620,14 @@ export function EmbedChatWidget({
       </div>
 
       {/* 消息列表 */}
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-5">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-4 text-center text-gray-500">
-            <div className="mb-3 text-4xl">👋</div>
-            <div className="mb-2 text-lg font-semibold text-gray-700">
+          <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center px-4 text-center text-gray-500">
+            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-3xl">👋</div>
+            <div className="mb-2 text-2xl font-semibold text-gray-800">
               {welcomeTitle || t("embed.greeting")}
             </div>
-            <div className="text-sm">{welcomeSubtitle || t("embed.greetingSubtitle")}</div>
+            <div className="text-base">{welcomeSubtitle || t("embed.greetingSubtitle")}</div>
             {suggestedQuestions.length > 0 && (
               <div className="mt-7 flex w-full max-w-[360px] flex-col gap-2.5">
                 {suggestedQuestions.slice(0, 6).map((question) => (
@@ -698,8 +708,8 @@ export function EmbedChatWidget({
       {/* 输入区域 */}
       <div
         className={cn(
-          "flex items-end gap-2 border-t p-4",
-          isDark ? "border-gray-700" : "border-gray-200"
+          "flex shrink-0 items-end gap-3 border-t p-4",
+          isDark ? "border-gray-700" : "border-slate-200 bg-slate-50"
         )}
       >
         <textarea
@@ -711,11 +721,11 @@ export function EmbedChatWidget({
           rows={1}
           disabled={isSending}
           className={cn(
-            "min-h-[40px] max-h-[120px] flex-1 resize-none rounded-lg border px-3 py-2.5 text-sm",
-            "focus:outline-none focus:ring-2 focus:ring-indigo-500",
+            "min-h-[44px] max-h-[120px] flex-1 resize-none rounded-md border px-4 py-3 text-sm shadow-sm",
+            "focus:outline-none focus:ring-2 focus:ring-slate-400",
             isDark
               ? "bg-gray-800 border-gray-600 text-white placeholder-gray-400"
-              : "bg-white border-gray-300 placeholder-gray-500"
+              : "bg-white border-slate-300 placeholder-slate-500"
           )}
           style={{
             height: 'auto',
@@ -732,9 +742,9 @@ export function EmbedChatWidget({
           onClick={() => void handleSend()}
           disabled={!canSend}
           className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-lg",
-            "bg-gradient-to-br from-indigo-500 to-purple-600 text-white",
-            "transition-opacity",
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-md",
+            "bg-slate-900 text-white shadow-sm",
+            "transition hover:-translate-y-0.5 hover:bg-slate-800",
             canSend ? "opacity-100" : "cursor-not-allowed opacity-50"
           )}
         >
