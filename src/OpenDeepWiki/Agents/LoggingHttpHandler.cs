@@ -39,6 +39,8 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
 
         var attempt = 0;
         HttpResponseMessage? response = null;
+        var forceProviderCompatibilityPatch = false;
+        string? errorBody = null;
 
         while (attempt < MaxRetryAttempts)
         {
@@ -48,9 +50,32 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
             {
                 // 如果是重试，需要克隆请求（因为原请求可能已被消费）
                 var requestToSend = attempt == 1 ? request : await CloneRequestAsync(request);
-                await ApplyProviderCompatibilityAsync(requestToSend, cancellationToken);
+                await ApplyProviderCompatibilityAsync(
+                    requestToSend,
+                    forceProviderCompatibilityPatch,
+                    cancellationToken);
+                errorBody = null;
 
                 response = await base.SendAsync(requestToSend, cancellationToken);
+
+                if (response.StatusCode == HttpStatusCode.BadRequest &&
+                    IsAnthropicMessagesRequest(requestToSend) &&
+                    attempt < MaxRetryAttempts)
+                {
+                    errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                    if (IsMissingWebFetchRequestsError(errorBody))
+                    {
+                        forceProviderCompatibilityPatch = true;
+                        Logger.Warning(
+                            "[{RequestId}] [{AiContext}] Retrying Anthropic-compatible request with web_fetch_requests compatibility patch. Attempt: {Attempt}",
+                            requestId,
+                            aiContext,
+                            attempt + 1);
+
+                        response.Dispose();
+                        continue;
+                    }
+                }
 
                 // 检查是否需要重试
                 if (ShouldRetry(response.StatusCode) && attempt < MaxRetryAttempts)
@@ -112,7 +137,7 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
 
             if (!response.IsSuccessStatusCode)
             {
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var content = errorBody ?? await response.Content.ReadAsStringAsync(cancellationToken);
                 Logger.Warning(
                     "[{RequestId}] [{AiContext}] Error response body: {ErrorBody}",
                     requestId,
@@ -209,6 +234,7 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
 
     private static async Task ApplyProviderCompatibilityAsync(
         HttpRequestMessage request,
+        bool forceBigModelWebFetchPatch,
         CancellationToken cancellationToken)
     {
         if (!IsAnthropicMessagesRequest(request))
@@ -248,13 +274,18 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
 
         if (parsed is not JsonObject body ||
             body.ContainsKey("web_fetch_requests") ||
-            !RequiresBigModelWebFetchRequests(request, body))
+            (!forceBigModelWebFetchPatch && !RequiresBigModelWebFetchRequests(request, body)))
         {
             return;
         }
 
         body["web_fetch_requests"] = new JsonArray();
         request.Content = CreatePatchedJsonContent(body, request.Content.Headers);
+        Logger.Information(
+            "Applied web_fetch_requests compatibility patch for Anthropic-compatible request. Host: {Host}, Model: {Model}, Forced: {Forced}",
+            request.RequestUri?.Host,
+            TryGetModelId(body),
+            forceBigModelWebFetchPatch);
     }
 
     private static bool IsAnthropicMessagesRequest(HttpRequestMessage request)
@@ -264,8 +295,9 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
             return false;
         }
 
-        return request.RequestUri.AbsolutePath.EndsWith("/v1/messages", StringComparison.OrdinalIgnoreCase) ||
-               request.RequestUri.AbsolutePath.EndsWith("/messages", StringComparison.OrdinalIgnoreCase);
+        var path = request.RequestUri.AbsolutePath.TrimEnd('/');
+        return path.EndsWith("/v1/messages", StringComparison.OrdinalIgnoreCase) ||
+               path.EndsWith("/messages", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool RequiresBigModelWebFetchRequests(HttpRequestMessage request, JsonObject body)
@@ -286,6 +318,21 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
         // internal host, so the request no longer exposes a bigmodel.cn host.
         // Official Anthropic should not receive this vendor-specific field.
         return request.RequestUri?.Host.Contains("anthropic.com", StringComparison.OrdinalIgnoreCase) != true;
+    }
+
+    private static string? TryGetModelId(JsonObject body)
+    {
+        return body["model"] is JsonValue modelValue &&
+               modelValue.TryGetValue<string>(out var model)
+            ? model
+            : null;
+    }
+
+    private static bool IsMissingWebFetchRequestsError(string? errorBody)
+    {
+        return !string.IsNullOrWhiteSpace(errorBody) &&
+               errorBody.Contains("web_fetch_requests", StringComparison.OrdinalIgnoreCase) &&
+               errorBody.Contains("cannot be absent", StringComparison.OrdinalIgnoreCase);
     }
 
     private static StringContent CreatePatchedJsonContent(
