@@ -248,7 +248,7 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
 
         if (parsed is not JsonObject body ||
             body.ContainsKey("web_fetch_requests") ||
-            !IsBigModelCompatibleRequest(request, body))
+            !RequiresBigModelWebFetchRequests(request, body))
         {
             return;
         }
@@ -268,7 +268,7 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
                request.RequestUri.AbsolutePath.EndsWith("/messages", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsBigModelCompatibleRequest(HttpRequestMessage request, JsonObject body)
+    private static bool RequiresBigModelWebFetchRequests(HttpRequestMessage request, JsonObject body)
     {
         if (request.RequestUri?.Host.Contains("bigmodel.cn", StringComparison.OrdinalIgnoreCase) == true)
         {
@@ -282,7 +282,10 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
             return true;
         }
 
-        return false;
+        // Some deployments proxy Zhipu's Anthropic-compatible API through an
+        // internal host, so the request no longer exposes a bigmodel.cn host.
+        // Official Anthropic should not receive this vendor-specific field.
+        return request.RequestUri?.Host.Contains("anthropic.com", StringComparison.OrdinalIgnoreCase) != true;
     }
 
     private static StringContent CreatePatchedJsonContent(
