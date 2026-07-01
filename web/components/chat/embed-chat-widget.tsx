@@ -295,9 +295,11 @@ export function EmbedChatWidget({
     let retryCount = 0
     const maxRetries = DEFAULT_MAX_RETRIES
     const retryDelayMs = DEFAULT_RETRY_DELAY_MS
+    let assistantContent = ''
 
     while (retryCount <= maxRetries) {
       try {
+        assistantContent = ''
         const url = `${apiBaseUrl}/api/v1/embed/stream`
         const allMessages = [...messages, userMessage]
         
@@ -338,7 +340,6 @@ export function EmbedChatWidget({
 
         const decoder = new TextDecoder()
         let buffer = ''
-        let assistantContent = ''
         let currentEventType = ''
         let receivedDone = false
 
@@ -391,6 +392,7 @@ export function EmbedChatWidget({
                 if (event.type === 'content') {
                   const contentChunk = getSSEContent(event.data, dataStr)
                   if (contentChunk !== null) {
+                    setError(null)
                     assistantContent += contentChunk
                     updateAssistantMessage(assistantContent)
                   }
@@ -406,6 +408,7 @@ export function EmbedChatWidget({
                 } else if (event.type === 'done') {
                   // 对话完成，清除重试信息
                   receivedDone = true
+                  setError(null)
                   setLastRequest(null)
                 } else if (event.type === 'error') {
                   const errorData = event.data as ErrorInfo
@@ -424,6 +427,13 @@ export function EmbedChatWidget({
         break
         
       } catch (err) {
+        if (assistantContent.trim()) {
+          console.warn('[EmbedChatWidget] Stream ended after content:', err)
+          setError(null)
+          setLastRequest(null)
+          break
+        }
+
         // 处理超时错误
         if (err instanceof Error && err.name === 'AbortError') {
           if (retryCount < maxRetries) {

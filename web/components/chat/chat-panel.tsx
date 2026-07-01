@@ -516,6 +516,7 @@ export function ChatPanel({
         switch (event.type) {
           case "content":
             const textContent = event.data as string
+            setError(null)
             assistantContent += textContent
             // 添加或更新 text 内容块
             const lastBlock = contentBlocks[contentBlocks.length - 1]
@@ -606,11 +607,17 @@ export function ChatPanel({
 
           case "done":
             // 对话完成，清除重试信息
+            setError(null)
             setLastRequest(null)
             break
 
           case "error":
             const errorInfo = event.data as ErrorInfo
+            if (assistantContent.trim()) {
+              console.warn(t("error.chatFailed"), errorInfo)
+              setError(null)
+              break
+            }
             setError({
               message: errorInfo.message || getErrorMessage(errorInfo.code),
               code: errorInfo.code,
@@ -622,6 +629,10 @@ export function ChatPanel({
       }
     } catch (err) {
       console.error(t("error.chatFailed"), err)
+      if (assistantContent.trim()) {
+        setError(null)
+        return
+      }
       setError({
         message: err instanceof Error ? err.message : t("error.chatFailed"),
         retryable: true,
