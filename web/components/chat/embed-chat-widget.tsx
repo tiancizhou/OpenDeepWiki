@@ -75,6 +75,20 @@ function getSSEContent(data: unknown, rawData?: string): string | null {
   return null
 }
 
+function stripThinkBlocks(content: string): string {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<\/?think>/gi, '')
+    .trim()
+}
+
+function isCompatibilityError(error: ErrorInfo | null): boolean {
+  if (!error) return false
+
+  const text = `${error.code ?? ''} ${error.message ?? ''}`.toLowerCase()
+  return text.includes('web_fetch_requests') && text.includes('cannot be absent')
+}
+
 /**
  * 错误信息
  */
@@ -427,7 +441,7 @@ export function EmbedChatWidget({
         break
         
       } catch (err) {
-        if (assistantContent.trim()) {
+        if (stripThinkBlocks(assistantContent).length > 0) {
           console.warn('[EmbedChatWidget] Stream ended after content:', err)
           setError(null)
           setLastRequest(null)
@@ -560,6 +574,10 @@ export function EmbedChatWidget({
 
   const isDark = theme === 'dark'
   const canSend = input.trim() && !isSending
+  const hasAssistantResponse = messages.some(
+    (message) => message.role === 'assistant' && stripThinkBlocks(message.content).length > 0
+  )
+  const visibleError = error && !(isCompatibilityError(error) && hasAssistantResponse)
 
   const renderChatPanel = (inline = false) => (
     <div
@@ -689,7 +707,7 @@ export function EmbedChatWidget({
       </div>
 
       {/* 错误提示 */}
-      {error && (
+      {visibleError && (
         <div className="mx-4 mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
           <div className="flex items-center justify-between gap-3">
             <span>{error.message}</span>
@@ -1039,9 +1057,10 @@ function renderMarkdown(content: string, isDark: boolean) {
  * 消息内容组件 - Markdown渲染
  */
 function MessageContent({ content, isDark }: { content: string; isDark: boolean }) {
-  const processedContent = React.useMemo(() => renderMarkdown(content, isDark), [content, isDark])
+  const displayContent = React.useMemo(() => stripThinkBlocks(content), [content])
+  const processedContent = React.useMemo(() => renderMarkdown(displayContent, isDark), [displayContent, isDark])
 
-  if (!content) return null
+  if (!displayContent) return null
 
   return (
     <div
