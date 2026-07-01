@@ -1,4 +1,8 @@
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Serilog;
 
 namespace OpenDeepWiki.Agents;
@@ -44,6 +48,7 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
             {
                 // 如果是重试，需要克隆请求（因为原请求可能已被消费）
                 var requestToSend = attempt == 1 ? request : await CloneRequestAsync(request);
+                await ApplyProviderCompatibilityAsync(requestToSend, cancellationToken);
 
                 response = await base.SendAsync(requestToSend, cancellationToken);
 
@@ -200,5 +205,103 @@ public class LoggingHttpHandler(HttpMessageHandler innerHandler) : DelegatingHan
         }
 
         return clone;
+    }
+
+    private static async Task ApplyProviderCompatibilityAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken)
+    {
+        if (!IsAnthropicMessagesRequest(request))
+        {
+            return;
+        }
+
+        if (request.Content == null)
+        {
+            return;
+        }
+
+        string content;
+        try
+        {
+            content = await request.Content.ReadAsStringAsync(cancellationToken);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return;
+        }
+
+        JsonNode? parsed;
+        try
+        {
+            parsed = JsonNode.Parse(content);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (parsed is not JsonObject body ||
+            body.ContainsKey("web_fetch_requests") ||
+            !IsBigModelCompatibleRequest(request, body))
+        {
+            return;
+        }
+
+        body["web_fetch_requests"] = new JsonArray();
+        request.Content = CreatePatchedJsonContent(body, request.Content.Headers);
+    }
+
+    private static bool IsAnthropicMessagesRequest(HttpRequestMessage request)
+    {
+        if (request.Method != HttpMethod.Post || request.RequestUri == null)
+        {
+            return false;
+        }
+
+        return request.RequestUri.AbsolutePath.EndsWith("/v1/messages", StringComparison.OrdinalIgnoreCase) ||
+               request.RequestUri.AbsolutePath.EndsWith("/messages", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBigModelCompatibleRequest(HttpRequestMessage request, JsonObject body)
+    {
+        if (request.RequestUri?.Host.Contains("bigmodel.cn", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            return true;
+        }
+
+        if (body["model"] is JsonValue modelValue &&
+            modelValue.TryGetValue<string>(out var model) &&
+            model.Trim().StartsWith("glm-", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static StringContent CreatePatchedJsonContent(
+        JsonObject body,
+        HttpContentHeaders originalHeaders)
+    {
+        var patchedContent = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+
+        foreach (var header in originalHeaders)
+        {
+            if (header.Key.Equals("Content-Length", StringComparison.OrdinalIgnoreCase) ||
+                header.Key.Equals("Content-Type", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            patchedContent.Headers.TryAddWithoutValidation(header.Key, header.Value);
+        }
+
+        return patchedContent;
     }
 }
