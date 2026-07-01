@@ -390,6 +390,9 @@ public class EmbedService : IEmbedService
         {
             ChatOptions = new ChatOptions
             {
+                Tools = tools.ToArray(),
+                ToolMode = ChatToolMode.Auto,
+                Instructions = systemPrompt,
                 MaxOutputTokens = 32000
             }
         };
@@ -415,10 +418,7 @@ public class EmbedService : IEmbedService
             requestOptions);
 
         // Build chat messages
-        var chatMessages = new List<ChatMessage>
-        {
-            new(ChatRole.System, systemPrompt)
-        };
+        var chatMessages = new List<ChatMessage>();
         chatMessages.AddRange(BuildChatMessages(request.Messages));
 
         // Get the last user message for logging

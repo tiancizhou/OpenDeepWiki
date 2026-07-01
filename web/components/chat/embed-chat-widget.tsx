@@ -89,6 +89,22 @@ function isCompatibilityError(error: ErrorInfo | null): boolean {
   return text.includes('web_fetch_requests') && text.includes('cannot be absent')
 }
 
+function toErrorInfo(error: unknown, fallbackMessage: string): ErrorInfo {
+  if (error && typeof error === 'object') {
+    const maybeError = error as Partial<ErrorInfo> & { name?: string }
+    return {
+      code: maybeError.code ?? maybeError.name,
+      message: typeof maybeError.message === 'string' ? maybeError.message : fallbackMessage,
+      retryable: maybeError.retryable,
+      retryAfterMs: maybeError.retryAfterMs,
+    }
+  }
+
+  return {
+    message: fallbackMessage,
+  }
+}
+
 /**
  * 错误信息
  */
@@ -426,7 +442,7 @@ export function EmbedChatWidget({
                   setLastRequest(null)
                 } else if (event.type === 'error') {
                   const errorData = event.data as ErrorInfo
-                  throw new Error(errorData.message || 'Chat request failed')
+                  throw errorData
                 }
               }
             }
@@ -441,7 +457,10 @@ export function EmbedChatWidget({
         break
         
       } catch (err) {
-        if (stripThinkBlocks(assistantContent).length > 0) {
+        const errorInfo = toErrorInfo(err, 'Send failed. Please retry.')
+        const hasVisibleContent = stripThinkBlocks(assistantContent).length > 0
+
+        if (hasVisibleContent && isCompatibilityError(errorInfo)) {
           console.warn('[EmbedChatWidget] Stream ended after content:', err)
           setError(null)
           setLastRequest(null)
@@ -488,11 +507,12 @@ export function EmbedChatWidget({
         
         console.error('[EmbedChatWidget] Send failed:', err)
         setError({
-          message: err instanceof Error ? err.message : 'Send failed. Please retry.',
-          retryable: true,
+          ...errorInfo,
+          retryable: errorInfo.retryable ?? true,
         })
-        // 移除空的助手消息
-        setMessages(prev => prev.filter(m => m.id !== assistantMessage.id))
+        if (!hasVisibleContent) {
+          setMessages(prev => prev.filter(m => m.id !== assistantMessage.id))
+        }
         break
       }
     }
