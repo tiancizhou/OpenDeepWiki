@@ -121,7 +121,8 @@ public class AdminUserService : IAdminUserService
         // 分配角色
         if (request.RoleIds?.Any() == true)
         {
-            foreach (var roleId in request.RoleIds)
+            var roleIds = await ResolveRoleIdsAsync(request.RoleIds);
+            foreach (var roleId in roleIds)
             {
                 _context.UserRoles.Add(new UserRole
                 {
@@ -180,6 +181,8 @@ public class AdminUserService : IAdminUserService
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == id && !u.IsDeleted);
         if (user == null) return false;
 
+        var resolvedRoleIds = await ResolveRoleIdsAsync(roleIds);
+
         // 删除现有角色
         var existingRoles = await _context.UserRoles
             .Where(ur => ur.UserId == id && !ur.IsDeleted)
@@ -190,7 +193,7 @@ public class AdminUserService : IAdminUserService
         }
 
         // 添加新角色
-        foreach (var roleId in roleIds)
+        foreach (var roleId in resolvedRoleIds)
         {
             _context.UserRoles.Add(new UserRole
             {
@@ -203,6 +206,43 @@ public class AdminUserService : IAdminUserService
 
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    private async Task<List<string>> ResolveRoleIdsAsync(IEnumerable<string>? roleValues)
+    {
+        var values = roleValues?
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Select(r => r.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+        if (values.Count == 0)
+        {
+            return new List<string>();
+        }
+
+        var roles = await _context.Roles
+            .Where(r => !r.IsDeleted && r.IsActive && (values.Contains(r.Id) || values.Contains(r.Name)))
+            .Select(r => new { r.Id, r.Name })
+            .ToListAsync();
+
+        var resolvedValues = roles
+            .SelectMany(r => new[] { r.Id, r.Name })
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var invalidValues = values
+            .Where(value => !resolvedValues.Contains(value))
+            .ToList();
+
+        if (invalidValues.Count > 0)
+        {
+            throw new InvalidOperationException($"角色不存在或已禁用: {string.Join(", ", invalidValues)}");
+        }
+
+        return roles
+            .Select(r => r.Id)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     public async Task<bool> ResetPasswordAsync(string id, string newPassword)

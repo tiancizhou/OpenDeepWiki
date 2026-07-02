@@ -108,10 +108,17 @@ public static class AdminUserEndpoints
             [FromBody] UpdateUserRolesRequest request,
             [FromServices] IAdminUserService userService) =>
         {
-            var result = await userService.UpdateUserRolesAsync(id, request.RoleIds);
-            if (!result)
-                return Results.NotFound(new { success = false, message = "用户不存在" });
-            return Results.Ok(new { success = true, message = "角色更新成功" });
+            try
+            {
+                var result = await userService.UpdateUserRolesAsync(id, request.RoleIds);
+                if (!result)
+                    return Results.NotFound(new { success = false, message = "用户不存在" });
+                return Results.Ok(new { success = true, message = "角色更新成功" });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { success = false, message = ex.Message });
+            }
         })
         .WithName("AdminUpdateUserRoles")
         .WithSummary("更新用户角色");
