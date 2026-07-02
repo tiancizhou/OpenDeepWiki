@@ -45,6 +45,10 @@ public static class ChatAppEndpoints
         group.MapGet("/mcp-options", GetMcpOptionsAsync)
             .WithName("GetAppMcpOptions");
 
+        group.MapGet("/users", SearchUsersAsync)
+            .WithName("SearchAppAccessUsers")
+            .WithSummary("搜索可授权用户");
+
         group.MapGet("/{id:guid}", GetAppByIdAsync)
             .WithName("GetAppById")
             .WithSummary("获取应用详情");
@@ -73,6 +77,18 @@ public static class ChatAppEndpoints
         group.MapGet("/{id:guid}/logs", GetAppLogsAsync)
             .WithName("GetAppLogs")
             .WithSummary("获取应用提问记录");
+
+        group.MapGet("/{id:guid}/access-users", GetAccessUsersAsync)
+            .WithName("GetAppAccessUsers")
+            .WithSummary("获取应用授权用户");
+
+        group.MapPost("/{id:guid}/access-users", GrantAccessAsync)
+            .WithName("GrantAppAccess")
+            .WithSummary("授权用户访问应用");
+
+        group.MapDelete("/{id:guid}/access-users/{targetUserId}", RevokeAccessAsync)
+            .WithName("RevokeAppAccess")
+            .WithSummary("移除用户应用访问权限");
 
         return app;
     }
@@ -226,6 +242,41 @@ public static class ChatAppEndpoints
             .ToListAsync(cancellationToken);
 
         return Results.Ok(mcps);
+    }
+
+    private static async Task<IResult> SearchUsersAsync(
+        [FromServices] IContext context,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken,
+        [FromQuery] string? search = null)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var query = context.Users
+            .Where(u => !u.IsDeleted && u.Status == 1);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var keyword = search.Trim();
+            query = query.Where(u => u.Name.Contains(keyword) || u.Email.Contains(keyword));
+        }
+
+        var users = await query
+            .OrderBy(u => u.Name)
+            .Take(20)
+            .Select(u => new
+            {
+                u.Id,
+                u.Name,
+                u.Email,
+                u.Avatar
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(users);
     }
 
     private static async Task<IResult> GetAppByIdAsync(
@@ -391,6 +442,71 @@ public static class ChatAppEndpoints
 
         var logs = await chatLogService.GetLogsAsync(query, cancellationToken);
         return Results.Ok(logs);
+    }
+
+    private static async Task<IResult> GetAccessUsersAsync(
+        Guid id,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var users = await chatAppService.GetAccessUsersAsync(id, userContext.UserId, cancellationToken);
+        return users == null
+            ? Results.NotFound(new { message = "应用不存在" })
+            : Results.Ok(users);
+    }
+
+    private static async Task<IResult> GrantAccessAsync(
+        Guid id,
+        [FromBody] GrantChatAppAccessDto dto,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.UserId))
+        {
+            return Results.BadRequest(new { message = "用户不能为空" });
+        }
+
+        try
+        {
+            var user = await chatAppService.GrantAccessAsync(id, userContext.UserId, dto.UserId, cancellationToken);
+            return user == null
+                ? Results.NotFound(new { message = "应用不存在" })
+                : Results.Ok(user);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
+    }
+
+    private static async Task<IResult> RevokeAccessAsync(
+        Guid id,
+        string targetUserId,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        var success = await chatAppService.RevokeAccessAsync(id, userContext.UserId, targetUserId, cancellationToken);
+        return success
+            ? Results.NoContent()
+            : Results.NotFound(new { message = "应用不存在" });
     }
 }
 

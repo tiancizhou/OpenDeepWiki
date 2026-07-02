@@ -89,6 +89,21 @@ export interface ChatAppDto {
   updatedAt?: string
 }
 
+export interface ChatAppAccessUser {
+  userId: string
+  userName: string
+  email: string
+  avatar?: string
+  grantedAt: string
+}
+
+export interface AppUserOption {
+  id: string
+  name: string
+  email: string
+  avatar?: string
+}
+
 export interface AppKnowledgeOption {
   repositoryId: string
   owner: string
@@ -213,6 +228,24 @@ export async function deleteApp(id: string): Promise<void> {
  */
 export async function regenerateAppSecret(id: string): Promise<{ appSecret: string }> {
   return api.post<{ appSecret: string }>(`/api/v1/apps/${id}/regenerate-secret`)
+}
+
+export async function getAppAccessUsers(id: string): Promise<ChatAppAccessUser[]> {
+  return api.get<ChatAppAccessUser[]>(`/api/v1/apps/${id}/access-users`)
+}
+
+export async function grantAppAccess(id: string, userId: string): Promise<ChatAppAccessUser> {
+  return api.post<ChatAppAccessUser>(`/api/v1/apps/${id}/access-users`, { userId })
+}
+
+export async function revokeAppAccess(id: string, userId: string): Promise<void> {
+  return api.delete<void>(`/api/v1/apps/${id}/access-users/${encodeURIComponent(userId)}`)
+}
+
+export async function searchAppUsers(search?: string): Promise<AppUserOption[]> {
+  const params = new URLSearchParams()
+  if (search) params.set('search', search)
+  return api.get<AppUserOption[]>(`/api/v1/apps/users${params.toString() ? `?${params}` : ''}`)
 }
 
 export interface AppAiProvider {

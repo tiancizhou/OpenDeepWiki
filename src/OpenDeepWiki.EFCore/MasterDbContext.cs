@@ -41,6 +41,7 @@ public interface IContext : IDisposable
     DbSet<UserDislike> UserDislikes { get; set; }
     DbSet<ChatAssistantConfig> ChatAssistantConfigs { get; set; }
     DbSet<ChatApp> ChatApps { get; set; }
+    DbSet<ChatAppUserAccess> ChatAppUserAccesses { get; set; }
     DbSet<AppStatistics> AppStatistics { get; set; }
     DbSet<ChatLog> ChatLogs { get; set; }
     DbSet<TranslationTask> TranslationTasks { get; set; }
@@ -96,6 +97,7 @@ public abstract class MasterDbContext : DbContext, IContext
     public DbSet<UserDislike> UserDislikes { get; set; } = null!;
     public DbSet<ChatAssistantConfig> ChatAssistantConfigs { get; set; } = null!;
     public DbSet<ChatApp> ChatApps { get; set; } = null!;
+    public DbSet<ChatAppUserAccess> ChatAppUserAccesses { get; set; } = null!;
     public DbSet<AppStatistics> AppStatistics { get; set; } = null!;
     public DbSet<ChatLog> ChatLogs { get; set; } = null!;
     public DbSet<TranslationTask> TranslationTasks { get; set; } = null!;
@@ -290,6 +292,12 @@ public abstract class MasterDbContext : DbContext, IContext
         // ChatApp 用户ID索引（用于查询用户的应用列表）
         modelBuilder.Entity<ChatApp>()
             .HasIndex(a => a.UserId);
+
+        modelBuilder.Entity<ChatAppUserAccess>(builder =>
+        {
+            builder.HasIndex(a => new { a.ChatAppId, a.UserId }).IsUnique();
+            builder.HasIndex(a => a.UserId);
+        });
 
         // AppStatistics AppId和日期组合唯一索引
         modelBuilder.Entity<AppStatistics>()

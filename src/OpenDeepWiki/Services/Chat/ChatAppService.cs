@@ -91,6 +91,33 @@ public class ChatAppDto
     public DateTime? UpdatedAt { get; set; }
 }
 
+public class ChatAppAccessUserDto
+{
+    public string UserId { get; set; } = string.Empty;
+    public string UserName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string? Avatar { get; set; }
+    public DateTime GrantedAt { get; set; }
+}
+
+public class ChatAppPortalItemDto
+{
+    public Guid Id { get; set; }
+    public string AppId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string? IconUrl { get; set; }
+    public string? KnowledgeOwner { get; set; }
+    public string? KnowledgeRepo { get; set; }
+    public string? KnowledgeBranch { get; set; }
+    public string? KnowledgeLanguage { get; set; }
+}
+
+public class GrantChatAppAccessDto
+{
+    public string UserId { get; set; } = string.Empty;
+}
+
 /// <summary>
 /// Interface for chat app service.
 /// </summary>
@@ -130,6 +157,18 @@ public interface IChatAppService
     /// Regenerates the app secret.
     /// </summary>
     Task<string?> RegenerateSecretAsync(Guid id, string userId, CancellationToken cancellationToken = default);
+
+    Task<List<ChatAppAccessUserDto>?> GetAccessUsersAsync(Guid id, string ownerUserId, CancellationToken cancellationToken = default);
+
+    Task<ChatAppAccessUserDto?> GrantAccessAsync(Guid id, string ownerUserId, string targetUserId, CancellationToken cancellationToken = default);
+
+    Task<bool> RevokeAccessAsync(Guid id, string ownerUserId, string targetUserId, CancellationToken cancellationToken = default);
+
+    Task<List<ChatAppPortalItemDto>> GetAccessibleAppsAsync(string userId, CancellationToken cancellationToken = default);
+
+    Task<ChatAppPortalItemDto?> GetAccessibleAppByAppIdAsync(string appId, string userId, CancellationToken cancellationToken = default);
+
+    Task<bool> CanUserAccessAppAsync(string appId, string userId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Generates a unique AppId.
@@ -296,6 +335,16 @@ public class ChatAppService : IChatAppService
         app.IsDeleted = true;
         app.UpdatedAt = DateTime.UtcNow;
 
+        var accessRows = await _context.ChatAppUserAccesses
+            .Where(a => a.ChatAppId == id && !a.IsDeleted)
+            .ToListAsync(cancellationToken);
+        foreach (var access in accessRows)
+        {
+            access.IsDeleted = true;
+            access.DeletedAt = DateTime.UtcNow;
+            access.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Deleted chat app {AppId}", app.AppId);
@@ -323,6 +372,188 @@ public class ChatAppService : IChatAppService
         _logger.LogInformation("Regenerated secret for chat app {AppId}", app.AppId);
 
         return app.AppSecret;
+    }
+
+    public async Task<List<ChatAppAccessUserDto>?> GetAccessUsersAsync(
+        Guid id,
+        string ownerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await _context.ChatApps
+            .AnyAsync(a => a.Id == id && a.UserId == ownerUserId && !a.IsDeleted, cancellationToken);
+        if (!exists)
+        {
+            return null;
+        }
+
+        return await (
+                from access in _context.ChatAppUserAccesses
+                join user in _context.Users on access.UserId equals user.Id
+                where access.ChatAppId == id
+                      && !access.IsDeleted
+                      && !user.IsDeleted
+                orderby access.CreatedAt descending
+                select new ChatAppAccessUserDto
+                {
+                    UserId = user.Id,
+                    UserName = user.Name,
+                    Email = user.Email,
+                    Avatar = user.Avatar,
+                    GrantedAt = access.CreatedAt
+                })
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<ChatAppAccessUserDto?> GrantAccessAsync(
+        Guid id,
+        string ownerUserId,
+        string targetUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var appExists = await _context.ChatApps
+            .AnyAsync(a => a.Id == id && a.UserId == ownerUserId && !a.IsDeleted, cancellationToken);
+        if (!appExists)
+        {
+            return null;
+        }
+
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Id == targetUserId && !u.IsDeleted && u.Status == 1, cancellationToken);
+        if (user == null)
+        {
+            throw new InvalidOperationException("用户不存在或不可用");
+        }
+
+        var existing = await _context.ChatAppUserAccesses
+            .FirstOrDefaultAsync(a => a.ChatAppId == id && a.UserId == targetUserId, cancellationToken);
+        if (existing == null)
+        {
+            existing = new ChatAppUserAccess
+            {
+                Id = Guid.NewGuid(),
+                ChatAppId = id,
+                UserId = targetUserId,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.ChatAppUserAccesses.Add(existing);
+        }
+        else
+        {
+            existing.IsDeleted = false;
+            existing.DeletedAt = null;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return new ChatAppAccessUserDto
+        {
+            UserId = user.Id,
+            UserName = user.Name,
+            Email = user.Email,
+            Avatar = user.Avatar,
+            GrantedAt = existing.CreatedAt
+        };
+    }
+
+    public async Task<bool> RevokeAccessAsync(
+        Guid id,
+        string ownerUserId,
+        string targetUserId,
+        CancellationToken cancellationToken = default)
+    {
+        var appExists = await _context.ChatApps
+            .AnyAsync(a => a.Id == id && a.UserId == ownerUserId && !a.IsDeleted, cancellationToken);
+        if (!appExists)
+        {
+            return false;
+        }
+
+        var access = await _context.ChatAppUserAccesses
+            .FirstOrDefaultAsync(a => a.ChatAppId == id && a.UserId == targetUserId && !a.IsDeleted, cancellationToken);
+        if (access == null)
+        {
+            return true;
+        }
+
+        access.IsDeleted = true;
+        access.DeletedAt = DateTime.UtcNow;
+        access.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return true;
+    }
+
+    public async Task<List<ChatAppPortalItemDto>> GetAccessibleAppsAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+                from access in _context.ChatAppUserAccesses
+                join app in _context.ChatApps on access.ChatAppId equals app.Id
+                where access.UserId == userId
+                      && !access.IsDeleted
+                      && !app.IsDeleted
+                      && app.IsActive
+                orderby app.Name
+                select new ChatAppPortalItemDto
+                {
+                    Id = app.Id,
+                    AppId = app.AppId,
+                    Name = app.Name,
+                    Description = app.Description,
+                    IconUrl = app.IconUrl,
+                    KnowledgeOwner = app.KnowledgeOwner,
+                    KnowledgeRepo = app.KnowledgeRepo,
+                    KnowledgeBranch = app.KnowledgeBranch,
+                    KnowledgeLanguage = app.KnowledgeLanguage
+                })
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<ChatAppPortalItemDto?> GetAccessibleAppByAppIdAsync(
+        string appId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+                from access in _context.ChatAppUserAccesses
+                join app in _context.ChatApps on access.ChatAppId equals app.Id
+                where app.AppId == appId
+                      && access.UserId == userId
+                      && !access.IsDeleted
+                      && !app.IsDeleted
+                      && app.IsActive
+                select new ChatAppPortalItemDto
+                {
+                    Id = app.Id,
+                    AppId = app.AppId,
+                    Name = app.Name,
+                    Description = app.Description,
+                    IconUrl = app.IconUrl,
+                    KnowledgeOwner = app.KnowledgeOwner,
+                    KnowledgeRepo = app.KnowledgeRepo,
+                    KnowledgeBranch = app.KnowledgeBranch,
+                    KnowledgeLanguage = app.KnowledgeLanguage
+                })
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<bool> CanUserAccessAppAsync(
+        string appId,
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await (
+                from access in _context.ChatAppUserAccesses
+                join app in _context.ChatApps on access.ChatAppId equals app.Id
+                where app.AppId == appId
+                      && access.UserId == userId
+                      && !access.IsDeleted
+                      && !app.IsDeleted
+                      && app.IsActive
+                select access.Id)
+            .AnyAsync(cancellationToken);
     }
 
     /// <inheritdoc />

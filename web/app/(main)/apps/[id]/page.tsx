@@ -16,6 +16,8 @@ import {
   RefreshCw,
   Pencil,
   Trash2,
+  UserPlus,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -23,6 +25,12 @@ import {
   deleteApp,
   regenerateAppSecret,
   ChatAppDto,
+  ChatAppAccessUser,
+  AppUserOption,
+  getAppAccessUsers,
+  grantAppAccess,
+  revokeAppAccess,
+  searchAppUsers,
 } from "@/lib/apps-api";
 import {
   AlertDialog,
@@ -95,6 +103,11 @@ export default function AppDetailPage() {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [accessUsers, setAccessUsers] = useState<ChatAppAccessUser[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userOptions, setUserOptions] = useState<AppUserOption[]>([]);
+  const [selectedAccessUserId, setSelectedAccessUserId] = useState("");
+  const [isAccessLoading, setIsAccessLoading] = useState(false);
 
   const fetchApp = useCallback(async () => {
     if (!appId) return;
@@ -110,6 +123,19 @@ export default function AppDetailPage() {
     }
   }, [appId]);
 
+  const fetchAccessUsers = useCallback(async () => {
+    if (!appId) return;
+    setIsAccessLoading(true);
+    try {
+      const users = await getAppAccessUsers(appId);
+      setAccessUsers(users);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "加载授权用户失败");
+    } finally {
+      setIsAccessLoading(false);
+    }
+  }, [appId]);
+
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       fetchApp();
@@ -117,6 +143,23 @@ export default function AppDetailPage() {
       setIsLoading(false);
     }
   }, [authLoading, isAuthenticated, fetchApp]);
+
+  useEffect(() => {
+    if (app) {
+      fetchAccessUsers();
+    }
+  }, [app, fetchAccessUsers]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !app) return;
+    const timer = window.setTimeout(() => {
+      searchAppUsers(userSearch || undefined)
+        .then((result) => setUserOptions(result))
+        .catch(() => setUserOptions([]));
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [app, isAuthenticated, userSearch]);
 
   const handleCopy = async (text: string) => {
     const copied = await copyTextToClipboard(text);
@@ -163,6 +206,28 @@ export default function AppDetailPage() {
     fetchApp();
   };
 
+  const handleGrantAccess = async () => {
+    if (!app || !selectedAccessUserId) return;
+    try {
+      await grantAppAccess(app.id, selectedAccessUserId);
+      setSelectedAccessUserId("");
+      setUserSearch("");
+      await fetchAccessUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "添加授权用户失败");
+    }
+  };
+
+  const handleRevokeAccess = async (userId: string) => {
+    if (!app) return;
+    try {
+      await revokeAppAccess(app.id, userId);
+      setAccessUsers((current) => current.filter((user) => user.userId !== userId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "移除授权用户失败");
+    }
+  };
+
   const getEmbedScript = () => {
     if (!app) return "";
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -178,7 +243,7 @@ export default function AppDetailPage() {
 
   const getPublicAccessUrl = () => {
     if (!app || typeof window === "undefined") return "";
-    return `${window.location.origin}/apps/public/${encodeURIComponent(app.appId)}`;
+    return `${window.location.origin}/chat-apps/${encodeURIComponent(app.appId)}`;
   };
 
   const getEmbedTokenScript = () => {
@@ -465,12 +530,76 @@ export default function AppDetailPage() {
               {t("apps.statistics.title")}
             </TabsTrigger>
             <TabsTrigger value="logs">{t("apps.logs.title")}</TabsTrigger>
+            <TabsTrigger value="access">访问用户</TabsTrigger>
           </TabsList>
           <TabsContent value="statistics" className="mt-4">
             <AppStatisticsChart appId={app.id} />
           </TabsContent>
           <TabsContent value="logs" className="mt-4">
             <AppLogsTable appId={app.id} />
+          </TabsContent>
+          <TabsContent value="access" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>访问用户</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <Input
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    placeholder="搜索用户名或邮箱"
+                  />
+                  <select
+                    value={selectedAccessUserId}
+                    onChange={(event) => setSelectedAccessUserId(event.target.value)}
+                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">选择用户</option>
+                    {userOptions
+                      .filter((user) => !accessUsers.some((access) => access.userId === user.id))
+                      .map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name} {user.email ? `(${user.email})` : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <Button onClick={handleGrantAccess} disabled={!selectedAccessUserId}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    添加
+                  </Button>
+                </div>
+
+                {isAccessLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : accessUsers.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    暂无授权用户，添加用户后对方可以在应用入口中看到并使用此智能体。
+                  </div>
+                ) : (
+                  <div className="divide-y rounded-lg border">
+                    {accessUsers.map((user) => (
+                      <div key={user.userId} className="flex items-center justify-between gap-3 p-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{user.userName}</div>
+                          <div className="truncate text-sm text-muted-foreground">{user.email}</div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRevokeAccess(user.userId)}
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          移除
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

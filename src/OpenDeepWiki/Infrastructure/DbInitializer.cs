@@ -408,6 +408,22 @@ public static class DbInitializer
         await ctx.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_ChatLogs_CreatedAt ON ChatLogs (CreatedAt)");
 
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ChatAppUserAccesses (
+                Id TEXT NOT NULL PRIMARY KEY,
+                ChatAppId TEXT NOT NULL,
+                UserId TEXT NOT NULL,
+                CreatedAt TEXT NOT NULL,
+                UpdatedAt TEXT,
+                DeletedAt TEXT,
+                IsDeleted INTEGER NOT NULL DEFAULT 0,
+                Version BLOB
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_ChatAppUserAccesses_ChatAppId_UserId ON ChatAppUserAccesses (ChatAppId, UserId)");
+        await ctx.Database.ExecuteSqlRawAsync(
+            "CREATE INDEX IF NOT EXISTS IX_ChatAppUserAccesses_UserId ON ChatAppUserAccesses (UserId)");
+
         // Add Description column if not exists
         var connection = ctx.Database.GetDbConnection();
         if (connection.State != System.Data.ConnectionState.Open)
@@ -628,6 +644,22 @@ public static class DbInitializer
             CREATE INDEX IF NOT EXISTS ""IX_ChatLogs_AppId"" ON ""ChatLogs"" (""AppId"")");
         await ctx.Database.ExecuteSqlRawAsync(@"
             CREATE INDEX IF NOT EXISTS ""IX_ChatLogs_CreatedAt"" ON ""ChatLogs"" (""CreatedAt"")");
+
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""ChatAppUserAccesses"" (
+                ""Id"" UUID NOT NULL PRIMARY KEY,
+                ""ChatAppId"" UUID NOT NULL,
+                ""UserId"" VARCHAR(100) NOT NULL,
+                ""CreatedAt"" TIMESTAMP WITH TIME ZONE NOT NULL,
+                ""UpdatedAt"" TIMESTAMP WITH TIME ZONE,
+                ""DeletedAt"" TIMESTAMP WITH TIME ZONE,
+                ""IsDeleted"" BOOLEAN NOT NULL DEFAULT FALSE,
+                ""Version"" BYTEA
+            )");
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ChatAppUserAccesses_ChatAppId_UserId"" ON ""ChatAppUserAccesses"" (""ChatAppId"", ""UserId"")");
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_ChatAppUserAccesses_UserId"" ON ""ChatAppUserAccesses"" (""UserId"")");
 
         // Add Description column if not exists
         await ctx.Database.ExecuteSqlRawAsync(@"

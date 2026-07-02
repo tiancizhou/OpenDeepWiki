@@ -95,6 +95,7 @@ public interface IEmbedService
     IAsyncEnumerable<SSEEvent> StreamEmbedChatAsync(
         EmbedChatRequest request,
         string? sourceDomain,
+        bool skipDomainValidation = false,
         CancellationToken cancellationToken = default);
 }
 
@@ -272,6 +273,7 @@ public class EmbedService : IEmbedService
     public async IAsyncEnumerable<SSEEvent> StreamEmbedChatAsync(
         EmbedChatRequest request,
         string? sourceDomain,
+        bool skipDomainValidation = false,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Validate AppId
@@ -287,15 +289,18 @@ public class EmbedService : IEmbedService
         }
 
         // Validate domain
-        var (isDomainValid, domainErrorCode, domainErrorMessage) = await ValidateDomainAsync(request.AppId, sourceDomain, cancellationToken);
-        if (!isDomainValid)
+        if (!skipDomainValidation)
         {
-            yield return new SSEEvent
+            var (isDomainValid, domainErrorCode, domainErrorMessage) = await ValidateDomainAsync(request.AppId, sourceDomain, cancellationToken);
+            if (!isDomainValid)
             {
-                Type = SSEEventType.Error,
-                Data = SSEErrorResponse.CreateNonRetryable(domainErrorCode!, domainErrorMessage)
-            };
-            yield break;
+                yield return new SSEEvent
+                {
+                    Type = SSEEventType.Error,
+                    Data = SSEErrorResponse.CreateNonRetryable(domainErrorCode!, domainErrorMessage)
+                };
+                yield break;
+            }
         }
 
         // Get app configuration

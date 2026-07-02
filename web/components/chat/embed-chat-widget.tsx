@@ -4,6 +4,7 @@ import * as React from "react"
 import { useTranslations } from "next-intl"
 import { ChevronLeft, ChevronRight, X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getToken } from "@/lib/auth-api"
 
 /**
  * 嵌入对话组件属性
@@ -27,6 +28,10 @@ export interface EmbedChatWidgetProps {
   welcomeSubtitle?: string
   /** 快捷问题 */
   suggestedQuestions?: string[]
+  /** 流式聊天接口 */
+  streamEndpoint?: string
+  /** 是否携带站内登录态 */
+  authenticated?: boolean
 }
 
 /**
@@ -169,6 +174,8 @@ export function EmbedChatWidget({
   welcomeTitle,
   welcomeSubtitle,
   suggestedQuestions = [],
+  streamEndpoint = '/api/v1/embed/stream',
+  authenticated = false,
 }: EmbedChatWidgetProps) {
   const t = useTranslations("chat")
   const [isOpen, setIsOpen] = React.useState(mode === 'inline')
@@ -330,16 +337,23 @@ export function EmbedChatWidget({
     while (retryCount <= maxRetries) {
       try {
         assistantContent = ''
-        const url = `${apiBaseUrl}/api/v1/embed/stream`
+        const url = `${apiBaseUrl}${streamEndpoint}`
         const allMessages = [...messages, userMessage]
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        }
+        if (authenticated) {
+          const token = getToken()
+          if (token) {
+            headers.Authorization = `Bearer ${token}`
+          }
+        }
         
         const response = await fetchWithTimeout(
           url,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers,
             body: JSON.stringify({
               appId,
               messages: allMessages.map(m => ({
@@ -519,7 +533,7 @@ export function EmbedChatWidget({
     
     setIsSending(false)
     abortControllerRef.current = null
-  }, [input, isSending, messages, appId, apiBaseUrl])
+  }, [input, isSending, messages, appId, apiBaseUrl, streamEndpoint, authenticated])
 
   const handleQuickQuestion = React.useCallback((question: string) => {
     if (!question.trim() || isSending) return

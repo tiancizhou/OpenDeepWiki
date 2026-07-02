@@ -90,7 +90,10 @@ public static class EmbedEndpoints
 
         try
         {
-            await foreach (var sseEvent in embedService.StreamEmbedChatAsync(request, sourceDomain, cancellationToken))
+            await foreach (var sseEvent in embedService.StreamEmbedChatAsync(
+                               request,
+                               sourceDomain,
+                               cancellationToken: cancellationToken))
             {
                 var eventData = FormatSSEEvent(sseEvent);
                 await httpContext.Response.WriteAsync(eventData, cancellationToken);
