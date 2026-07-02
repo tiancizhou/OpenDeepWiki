@@ -85,6 +85,28 @@ public class AdminToolsServiceTests
         });
     }
 
+    [Fact]
+    public async Task DiscoverAiModelsAsync_WhenEndpointReturnsHtml_ThrowsReadableError()
+    {
+        await using var context = CreateContext();
+        var provider = CreateProvider();
+        context.AiProviderConfigs.Add(provider);
+        await context.SaveChangesAsync();
+
+        using var handler = new StubHttpMessageHandler("""
+            <html>
+            <body>404 Not Found</body>
+            </html>
+            """);
+        var service = CreateService(context, handler);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.DiscoverAiModelsAsync(provider.Id));
+
+        Assert.Contains("non-JSON response", ex.Message);
+        Assert.Contains("/models", ex.Message);
+    }
+
     private static AdminToolsService CreateService(IContext context, HttpMessageHandler handler)
     {
         var configuration = new ConfigurationBuilder()

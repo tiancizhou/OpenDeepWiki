@@ -543,10 +543,16 @@ public class AdminToolsService : IAdminToolsService
         }
 
         using var response = await client.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
         var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"AI model discovery failed with HTTP {(int)response.StatusCode}: {TrimResponsePreview(json)}",
+                null,
+                response.StatusCode);
+        }
 
-        using var document = JsonDocument.Parse(json);
+        using var document = ParseModelDiscoveryResponse(json, endpoint);
         var modelElements = EnumerateModelElements(document.RootElement);
         return modelElements
             .Select(model => new AiModelConfigDto
@@ -566,6 +572,36 @@ public class AdminToolsService : IAdminToolsService
                 IsActive = true
             })
             .ToList();
+    }
+
+    private static JsonDocument ParseModelDiscoveryResponse(string json, string endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new InvalidOperationException($"AI model discovery returned an empty response from {endpoint}.");
+        }
+
+        try
+        {
+            return JsonDocument.Parse(json);
+        }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException(
+                $"AI model discovery returned a non-JSON response from {endpoint}: {TrimResponsePreview(json)}",
+                ex);
+        }
+    }
+
+    private static string TrimResponsePreview(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            return "<empty>";
+        }
+
+        var normalized = Regex.Replace(content.Trim(), @"\s+", " ");
+        return normalized.Length <= 240 ? normalized : normalized[..240] + "...";
     }
 
     public async Task<AiProviderConnectivityTestResult> TestAiProviderConnectivityAsync(
