@@ -24,6 +24,14 @@ public static class AppPortalEndpoints
             .WithName("GetAccessibleChatApp")
             .WithSummary("获取当前用户可访问的应用详情");
 
+        group.MapGet("/apps/{appId}/history", GetHistoryAsync)
+            .WithName("GetPortalAppChatHistory")
+            .WithSummary("获取当前用户的应用聊天记录");
+
+        group.MapDelete("/apps/{appId}/history", ClearHistoryAsync)
+            .WithName("ClearPortalAppChatHistory")
+            .WithSummary("清空当前用户的应用聊天记录");
+
         group.MapPost("/stream", StreamAsync)
             .WithName("StreamPortalAppChat")
             .WithSummary("登录用户应用聊天流");
@@ -60,6 +68,67 @@ public static class AppPortalEndpoints
         return app == null
             ? Results.NotFound(new { message = "应用不存在或无权访问" })
             : Results.Ok(app);
+    }
+
+    private static async Task<IResult> GetHistoryAsync(
+        string appId,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IChatLogService chatLogService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken,
+        [FromQuery] int take = 50)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!await chatAppService.CanUserAccessAppAsync(appId, userContext.UserId, cancellationToken))
+        {
+            return Results.NotFound(new { message = "应用不存在或无权访问" });
+        }
+
+        var logs = await chatLogService.GetPortalHistoryAsync(appId, userContext.UserId, take, cancellationToken);
+        var messages = logs.SelectMany(log => new[]
+        {
+            new PortalChatMessageDto
+            {
+                Id = $"{log.Id:N}-user",
+                Role = "user",
+                Content = log.Question,
+                Timestamp = new DateTimeOffset(log.CreatedAt).ToUnixTimeMilliseconds()
+            },
+            new PortalChatMessageDto
+            {
+                Id = $"{log.Id:N}-assistant",
+                Role = "assistant",
+                Content = log.AnswerSummary ?? string.Empty,
+                Timestamp = new DateTimeOffset(log.CreatedAt).ToUnixTimeMilliseconds()
+            }
+        }).Where(message => !string.IsNullOrWhiteSpace(message.Content)).ToList();
+
+        return Results.Ok(messages);
+    }
+
+    private static async Task<IResult> ClearHistoryAsync(
+        string appId,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IChatLogService chatLogService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (!await chatAppService.CanUserAccessAppAsync(appId, userContext.UserId, cancellationToken))
+        {
+            return Results.NotFound(new { message = "应用不存在或无权访问" });
+        }
+
+        var deletedCount = await chatLogService.ClearPortalHistoryAsync(appId, userContext.UserId, cancellationToken);
+        return Results.Ok(new { deletedCount });
     }
 
     private static async Task StreamAsync(
@@ -142,4 +211,15 @@ public static class AppPortalEndpoints
 
         return $"event: {sseEvent.Type}\ndata: {payload}\n\n";
     }
+}
+
+public class PortalChatMessageDto
+{
+    public string Id { get; set; } = string.Empty;
+
+    public string Role { get; set; } = string.Empty;
+
+    public string Content { get; set; } = string.Empty;
+
+    public long Timestamp { get; set; }
 }

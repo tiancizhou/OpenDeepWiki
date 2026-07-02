@@ -5,9 +5,14 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
-import { EmbedChatWidget } from "@/components/chat/embed-chat-widget";
+import { ChatMessage, EmbedChatWidget } from "@/components/chat/embed-chat-widget";
 import { useAuth } from "@/contexts/auth-context";
-import { getPortalApp, PortalChatApp } from "@/lib/app-portal-api";
+import {
+  clearPortalAppHistory,
+  getPortalApp,
+  getPortalAppHistory,
+  PortalChatApp,
+} from "@/lib/app-portal-api";
 
 export default function ChatAppPage() {
   const params = useParams<{ appId: string }>();
@@ -15,7 +20,9 @@ export default function ChatAppPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [app, setApp] = useState<PortalChatApp | null>(null);
+  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadApp = useCallback(async () => {
@@ -31,6 +38,22 @@ export default function ChatAppPage() {
     }
   }, [appId]);
 
+  const loadHistory = useCallback(async () => {
+    setIsHistoryLoading(true);
+    try {
+      setHistoryMessages(await getPortalAppHistory(appId));
+    } catch {
+      setHistoryMessages([]);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  }, [appId]);
+
+  const handleClearHistory = useCallback(async () => {
+    await clearPortalAppHistory(appId);
+    setHistoryMessages([]);
+  }, [appId]);
+
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
@@ -39,6 +62,11 @@ export default function ChatAppPage() {
     }
     loadApp();
   }, [authLoading, isAuthenticated, loadApp, router]);
+
+  useEffect(() => {
+    if (!app || !isAuthenticated) return;
+    loadHistory();
+  }, [app, isAuthenticated, loadHistory]);
 
   return (
     <AppLayout activeItem="智能助手">
@@ -75,6 +103,10 @@ export default function ChatAppPage() {
                 welcomeSubtitle="有什么可以帮助你的吗？"
                 streamEndpoint="/api/v1/app-portal/stream"
                 authenticated
+                initialMessages={historyMessages}
+                historyLoading={isHistoryLoading}
+                historyHint="聊天记录会保存在当前账号中"
+                onClearHistory={handleClearHistory}
               />
             )}
           </section>

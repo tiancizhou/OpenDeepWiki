@@ -32,6 +32,14 @@ export interface EmbedChatWidgetProps {
   streamEndpoint?: string
   /** 是否携带站内登录态 */
   authenticated?: boolean
+  /** 初始聊天记录 */
+  initialMessages?: ChatMessage[]
+  /** 历史记录加载中 */
+  historyLoading?: boolean
+  /** 历史记录提示 */
+  historyHint?: string
+  /** 清空聊天记录回调 */
+  onClearHistory?: () => Promise<void> | void
 }
 
 /**
@@ -48,7 +56,7 @@ interface EmbedConfig {
 /**
  * 对话消息
  */
-interface ChatMessage {
+export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
@@ -176,6 +184,10 @@ export function EmbedChatWidget({
   suggestedQuestions = [],
   streamEndpoint = '/api/v1/embed/stream',
   authenticated = false,
+  initialMessages,
+  historyLoading = false,
+  historyHint,
+  onClearHistory,
 }: EmbedChatWidgetProps) {
   const t = useTranslations("chat")
   const [isOpen, setIsOpen] = React.useState(mode === 'inline')
@@ -199,6 +211,13 @@ export function EmbedChatWidget({
 
   // 获取图标URL
   const iconUrl = propIconUrl || config?.iconUrl
+
+  React.useEffect(() => {
+    if (!initialMessages) return
+    setMessages(initialMessages)
+    setError(null)
+    setLastRequest(null)
+  }, [initialMessages])
 
   // 加载配置
   React.useEffect(() => {
@@ -257,11 +276,14 @@ export function EmbedChatWidget({
   }, [mode])
 
   // 清空对话
-  const handleClear = React.useCallback(() => {
+  const handleClear = React.useCallback(async () => {
+    if (onClearHistory) {
+      await onClearHistory()
+    }
     setMessages([])
     setError(null)
     setLastRequest(null)
-  }, [])
+  }, [onClearHistory])
 
   /**
    * 带超时的fetch请求
@@ -646,7 +668,7 @@ export function EmbedChatWidget({
             </div>
             {inline && (
               <div className="mt-0.5 text-xs text-sky-700/70">
-                当前对话仅保存在本次页面会话中
+                {historyHint || '聊天记录会保存在当前账号中'}
               </div>
             )}
           </div>
@@ -654,7 +676,7 @@ export function EmbedChatWidget({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onClick={handleClear}
+            onClick={() => void handleClear()}
             disabled={messages.length === 0}
             className={cn(
               "rounded p-1.5 transition-colors",
@@ -683,7 +705,12 @@ export function EmbedChatWidget({
 
       {/* 消息列表 */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-5">
-        {messages.length === 0 ? (
+        {historyLoading ? (
+          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            正在加载聊天记录...
+          </div>
+        ) : messages.length === 0 ? (
           <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center px-4 text-center text-gray-500">
             <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-sky-50 text-3xl shadow-inner shadow-sky-100">👋</div>
             <div className="mb-2 text-2xl font-semibold text-gray-800">

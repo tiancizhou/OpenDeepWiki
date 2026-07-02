@@ -662,9 +662,7 @@ public class EmbedService : IEmbedService
                 knowledgeContext.Repo,
                 CancellationToken.None);
 
-            var answerSummary = responseBuilder.Length > 500
-                ? responseBuilder.ToString(0, 500) + "..."
-                : responseBuilder.ToString();
+            var answerSummary = responseBuilder.ToString();
 
             await _chatLogService.RecordChatLogAsync(new RecordChatLogDto
             {

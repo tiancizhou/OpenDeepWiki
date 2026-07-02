@@ -78,6 +78,23 @@ public interface IChatLogService
     Task<PaginatedChatLogsDto> GetLogsAsync(ChatLogQueryDto query, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets persisted portal chat history for a user and app.
+    /// </summary>
+    Task<List<ChatLogDto>> GetPortalHistoryAsync(
+        string appId,
+        string userIdentifier,
+        int take = 50,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Soft deletes persisted portal chat history for a user and app.
+    /// </summary>
+    Task<int> ClearPortalHistoryAsync(
+        string appId,
+        string userIdentifier,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets a single chat log by ID.
     /// </summary>
     Task<ChatLogDto?> GetLogByIdAsync(Guid id, string appId, CancellationToken cancellationToken = default);
@@ -172,6 +189,58 @@ public class ChatLogService : IChatLogService
             Page = query.Page,
             PageSize = query.PageSize
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<List<ChatLogDto>> GetPortalHistoryAsync(
+        string appId,
+        string userIdentifier,
+        int take = 50,
+        CancellationToken cancellationToken = default)
+    {
+        var safeTake = Math.Clamp(take, 1, 100);
+
+        var logs = await _context.ChatLogs
+            .Where(l => l.AppId == appId
+                        && l.UserIdentifier == userIdentifier
+                        && l.SourceDomain == null
+                        && !l.IsDeleted)
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(safeTake)
+            .ToListAsync(cancellationToken);
+
+        return logs
+            .OrderBy(l => l.CreatedAt)
+            .Select(MapToDto)
+            .ToList();
+    }
+
+    /// <inheritdoc />
+    public async Task<int> ClearPortalHistoryAsync(
+        string appId,
+        string userIdentifier,
+        CancellationToken cancellationToken = default)
+    {
+        var logs = await _context.ChatLogs
+            .Where(l => l.AppId == appId
+                        && l.UserIdentifier == userIdentifier
+                        && l.SourceDomain == null
+                        && !l.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        foreach (var log in logs)
+        {
+            log.IsDeleted = true;
+            log.DeletedAt = DateTime.UtcNow;
+            log.UpdatedAt = DateTime.UtcNow;
+        }
+
+        if (logs.Count > 0)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        return logs.Count;
     }
 
 
