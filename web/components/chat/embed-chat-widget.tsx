@@ -704,7 +704,7 @@ export function EmbedChatWidget({
       </div>
 
       {/* 消息列表 */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-white p-5">
+      <div className="wiki-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-white p-5">
         {historyLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

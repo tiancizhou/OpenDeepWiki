@@ -70,8 +70,8 @@ export default function ChatAppPage() {
 
   return (
     <AppLayout activeItem="智能助手">
-      <main className="flex min-h-0 flex-1 flex-col bg-[#eef8ff] text-slate-950">
-        <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8">
+      <main className="flex h-[calc(100vh-64px)] min-h-0 flex-1 flex-col overflow-hidden bg-[#eef8ff] text-slate-950">
+        <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col px-4 py-4 sm:px-6 lg:px-8">
           <header className="mb-3 flex shrink-0 items-center justify-between rounded-lg border border-sky-100 bg-white/90 px-5 py-3 shadow-sm shadow-sky-100/70">
             <Button variant="ghost" size="sm" onClick={() => router.push("/chat-apps")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -85,7 +85,7 @@ export default function ChatAppPage() {
             )}
           </header>
 
-          <section className="min-h-0 flex-1">
+          <section className="min-h-0 flex-1 overflow-hidden">
             {isLoading || authLoading ? (
               <div className="flex h-full items-center justify-center rounded-lg border border-sky-100 bg-white">
                 <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
