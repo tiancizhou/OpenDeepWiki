@@ -596,6 +596,22 @@ public class EmbedService : IEmbedService
                                 };
                             }
                         }
+                        else if (deltaType == "text_delta" && string.IsNullOrEmpty(update.Text))
+                        {
+                            var text = delta.TryGetProperty("text", out var textElement)
+                                ? textElement.GetString() ?? string.Empty
+                                : string.Empty;
+
+                            if (!string.IsNullOrEmpty(text))
+                            {
+                                responseBuilder.Append(text);
+                                yield return new SSEEvent
+                                {
+                                    Type = SSEEventType.Content,
+                                    Data = text
+                                };
+                            }
+                        }
                         else if (deltaType == "input_json_delta")
                         {
                             var partialJson = delta.TryGetProperty("partial_json", out var jsonElement)
@@ -954,6 +970,9 @@ public class EmbedService : IEmbedService
             sb.AppendLine();
             sb.AppendLine("Use these tools proactively to gather context before answering.");
             sb.AppendLine("NEVER guess about code - always verify with actual source files.");
+            sb.AppendLine("For repository questions about bugs, security, architecture, APIs, data flow, permissions, configuration, or troubleshooting, you MUST call at least one repository tool before giving the substantive answer.");
+            sb.AppendLine("Do NOT respond with only promises such as 'I will start checking', 'let me inspect', or 'I am going to analyze'. If analysis is needed, perform the tool calls first, then answer with findings.");
+            sb.AppendLine("For security-review requests, start by using ListFiles or Grep to identify security-sensitive areas, then read the relevant files before reporting vulnerabilities.");
         }
         else if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
         {
@@ -1011,6 +1030,7 @@ public class EmbedService : IEmbedService
             sb.AppendLine("- Use ReadFile to examine specific implementations");
             sb.AppendLine("- Collect sufficient context before forming conclusions");
             sb.AppendLine("- DO NOT skip code analysis - always verify with source");
+            sb.AppendLine("- DO NOT say you are about to inspect the project unless you actually call tools in this turn");
             sb.AppendLine();
         }
 
