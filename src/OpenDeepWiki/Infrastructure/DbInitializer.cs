@@ -178,6 +178,15 @@ public static class DbInitializer
                 IsActive = true,
                 IsSystemRole = true,
                 CreatedAt = DateTime.UtcNow
+            },
+            new Role
+            {
+                Id = Guid.NewGuid().ToString(),
+                Name = "AssistantUser",
+                Description = "仅可访问智能助手的用户",
+                IsActive = true,
+                IsSystemRole = true,
+                CreatedAt = DateTime.UtcNow
             }
         };
 

@@ -31,6 +31,7 @@ import { useAuth } from "@/contexts/auth-context";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api-client";
+import { isAssistantOnlyUser } from "@/lib/role-access";
 
 const itemKeys = [
     { key: "explore", url: "/", icon: Compass, requireAuth: false },
@@ -58,7 +59,7 @@ interface VersionInfo {
 export function AppSidebar({ activeItem, onItemClick, ...props }: AppSidebarProps) {
     const t = useTranslations();
     const router = useRouter();
-    const { isAuthenticated } = useAuth();
+    const { user, isAuthenticated } = useAuth();
     const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
     useEffect(() => {
@@ -77,7 +78,11 @@ export function AppSidebar({ activeItem, onItemClick, ...props }: AppSidebarProp
     const displayVersion = versionInfo?.version?.split('+')[0] || '';
     const isPreview = displayVersion.toLowerCase().includes('preview');
 
-    const items = itemKeys.map(item => ({
+    const visibleItemKeys = isAssistantOnlyUser(user)
+        ? itemKeys.filter(item => item.key === "chatApps")
+        : itemKeys;
+
+    const items = visibleItemKeys.map(item => ({
         title: t(`sidebar.${item.key}`),
         url: item.url,
         icon: item.icon,

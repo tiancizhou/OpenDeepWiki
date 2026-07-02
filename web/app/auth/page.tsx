@@ -8,12 +8,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/contexts/auth-context";
 import { useTranslations } from "@/hooks/use-translations";
+import { isAssistantOnlyUser } from "@/lib/role-access";
 
 export default function AuthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get("returnUrl");
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const t = useTranslations();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,7 +23,12 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const redirectAfterAuth = () => {
+  const redirectAfterAuth = (currentUser = user) => {
+    if (isAssistantOnlyUser(currentUser)) {
+      router.push("/chat-apps");
+      return;
+    }
+
     if (returnUrl) {
       router.push(decodeURIComponent(returnUrl));
     } else {
@@ -36,8 +42,8 @@ export default function AuthPage() {
     setIsLoading(true);
 
     try {
-      await login({ email, password });
-      redirectAfterAuth();
+      const loggedInUser = await login({ email, password });
+      redirectAfterAuth(loggedInUser);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("auth.errors.loginFailed"));
     } finally {
