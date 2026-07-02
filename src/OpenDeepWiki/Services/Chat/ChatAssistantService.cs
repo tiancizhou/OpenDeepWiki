@@ -1015,12 +1015,6 @@ public class ChatAssistantService : IChatAssistantService
         }
         sb.AppendLine();
         sb.AppendLine("Use these tools proactively to gather context before answering.");
-        if (hasCodeAccess)
-        {
-            sb.AppendLine("For repository questions about bugs, security, architecture, APIs, data flow, permissions, configuration, or troubleshooting, you MUST call at least one repository tool before giving the substantive answer.");
-            sb.AppendLine("Do NOT respond with only promises such as 'I will start checking', 'let me inspect', or 'I am going to analyze'. If analysis is needed, perform the tool calls first, then answer with findings.");
-            sb.AppendLine("For security-review requests, start by using ListFiles or Grep to identify security-sensitive areas, then read the relevant files before reporting vulnerabilities.");
-        }
         sb.AppendLine("</capabilities>");
         sb.AppendLine();
 
@@ -1082,7 +1076,6 @@ public class ChatAssistantService : IChatAssistantService
             sb.AppendLine("  * Use ReadFile on files listed in 'sourceFiles' to examine actual implementation");
             sb.AppendLine("  * Use Grep to find related code patterns and usages");
             sb.AppendLine("  * Use ListFiles to understand project structure if needed");
-            sb.AppendLine("- DO NOT say you are about to inspect the project unless you actually call tools in this turn");
         }
         sb.AppendLine("- Collect sufficient context before forming conclusions");
         sb.AppendLine("- DO NOT skip code analysis when documentation is insufficient");
