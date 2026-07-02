@@ -596,22 +596,6 @@ public class EmbedService : IEmbedService
                                 };
                             }
                         }
-                        else if (deltaType == "text_delta" && string.IsNullOrEmpty(update.Text))
-                        {
-                            var text = delta.TryGetProperty("text", out var textElement)
-                                ? textElement.GetString() ?? string.Empty
-                                : string.Empty;
-
-                            if (!string.IsNullOrEmpty(text))
-                            {
-                                responseBuilder.Append(text);
-                                yield return new SSEEvent
-                                {
-                                    Type = SSEEventType.Content,
-                                    Data = text
-                                };
-                            }
-                        }
                         else if (deltaType == "input_json_delta")
                         {
                             var partialJson = delta.TryGetProperty("partial_json", out var jsonElement)

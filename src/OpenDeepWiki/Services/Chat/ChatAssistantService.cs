@@ -747,21 +747,6 @@ public class ChatAssistantService : IChatAssistantService
                                     };
                                 }
                             }
-                            else if (deltaType == "text_delta" && string.IsNullOrEmpty(update.Text))
-                            {
-                                var text = delta.TryGetProperty("text", out var textElement)
-                                    ? textElement.GetString() ?? ""
-                                    : "";
-
-                                if (!string.IsNullOrEmpty(text))
-                                {
-                                    yield return new SSEEvent
-                                    {
-                                        Type = SSEEventType.Content,
-                                        Data = text
-                                    };
-                                }
-                            }
                             // handle tool input delta updates
                             else if (deltaType == "input_json_delta")
                             {
