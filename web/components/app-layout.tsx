@@ -17,9 +17,10 @@ interface AppLayoutProps {
   activeItem?: string;
   onItemClick?: (item: string) => void;
   searchBox?: HeaderSearchBoxProps;
+  insetClassName?: string;
 }
 
-export function AppLayout({ children, activeItem, onItemClick, searchBox }: AppLayoutProps) {
+export function AppLayout({ children, activeItem, onItemClick, searchBox, insetClassName }: AppLayoutProps) {
   const t = useTranslations();
   const defaultActiveItem = activeItem || t("sidebar.explore");
 
@@ -33,7 +34,7 @@ export function AppLayout({ children, activeItem, onItemClick, searchBox }: AppL
   return (
     <SidebarProvider defaultOpen={true}>
       <AppSidebar activeItem={defaultActiveItem} onItemClick={onItemClick} className="!flex" />
-      <SidebarInset>
+      <SidebarInset className={insetClassName}>
         <Header
           title={defaultActiveItem}
           currentWeekday={currentWeekday}

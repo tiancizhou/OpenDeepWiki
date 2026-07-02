@@ -205,6 +205,7 @@ export function EmbedChatWidget({
     assistantMessageId: string
   } | null>(null)
   
+  const messagesContainerRef = React.useRef<HTMLDivElement>(null)
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = React.useRef<AbortController | null>(null)
@@ -247,7 +248,13 @@ export function EmbedChatWidget({
 
   // 滚动到底部
   React.useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: 'smooth',
+    })
   }, [messages])
 
   // 聚焦输入框
@@ -640,7 +647,7 @@ export function EmbedChatWidget({
       className={cn(
         "flex flex-col overflow-hidden",
         inline
-          ? "h-full min-h-0 w-full rounded-lg border border-sky-100 bg-white shadow-sm shadow-sky-100/70"
+          ? "h-full max-h-full min-h-0 w-full rounded-lg border border-sky-100 bg-white shadow-sm shadow-sky-100/70"
           : cn(
               "fixed z-[99998]",
               "w-[380px] h-[600px] max-h-[calc(100vh-120px)]",
@@ -704,7 +711,10 @@ export function EmbedChatWidget({
       </div>
 
       {/* 消息列表 */}
-      <div className="wiki-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-white p-5">
+      <div
+        ref={messagesContainerRef}
+        className="wiki-scrollbar min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-white p-5"
+      >
         {historyLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
