@@ -130,8 +130,15 @@ public static class ChatAppEndpoints
             return Results.BadRequest(new { message = "应用名称不能为空" });
         }
 
-        var app = await chatAppService.CreateAppAsync(userContext.UserId, dto, cancellationToken);
-        return Results.Created($"/api/v1/apps/{app.Id}", app);
+        try
+        {
+            var app = await chatAppService.CreateAppAsync(userContext.UserId, dto, cancellationToken);
+            return Results.Created($"/api/v1/apps/{app.Id}", app);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
     }
 
     /// <summary>
@@ -315,7 +322,16 @@ public static class ChatAppEndpoints
             return Results.Unauthorized();
         }
 
-        var app = await chatAppService.UpdateAppAsync(id, userContext.UserId, dto, cancellationToken);
+        ChatAppDto? app;
+        try
+        {
+            app = await chatAppService.UpdateAppAsync(id, userContext.UserId, dto, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(new { message = ex.Message });
+        }
+
         if (app == null)
         {
             return Results.NotFound(new { message = "应用不存在" });

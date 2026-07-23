@@ -28,6 +28,8 @@ public class EmbedConfigDto
     public string? ErrorMessage { get; set; }
     public string? AppName { get; set; }
     public string? IconUrl { get; set; }
+    public List<string> AvailableModels { get; set; } = new();
+    public string? DefaultModel { get; set; }
 }
 
 /// <summary>
@@ -264,7 +266,9 @@ public class EmbedService : IEmbedService
         {
             Valid = true,
             AppName = app.Name,
-            IconUrl = app.IconUrl
+            IconUrl = app.IconUrl,
+            AvailableModels = GetConfiguredModels(app),
+            DefaultModel = ResolveConfiguredEmbedModel(app)
         };
     }
 
@@ -318,6 +322,17 @@ public class EmbedService : IEmbedService
         }
 
         var modelId = ResolveConfiguredEmbedModel(app, request.ModelId);
+        if (modelId == null)
+        {
+            yield return new SSEEvent
+            {
+                Type = SSEEventType.Error,
+                Data = SSEErrorResponse.CreateNonRetryable(
+                    ChatErrorCodes.MODEL_UNAVAILABLE,
+                    "所选模型不在该应用的可用模型列表中")
+            };
+            yield break;
+        }
 
         var knowledgeContext = ResolveKnowledgeContext(request, app);
 
@@ -827,18 +842,38 @@ public class EmbedService : IEmbedService
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
-    internal static string ResolveConfiguredEmbedModel(ChatAppDto app, string? requestedModelId = null)
+    internal static string? ResolveConfiguredEmbedModel(ChatAppDto app, string? requestedModelId = null)
     {
-        var modelId = NormalizeOptional(app.DefaultModel);
-        if (!string.IsNullOrWhiteSpace(modelId))
+        var availableModels = GetConfiguredModels(app);
+        var requestedModel = NormalizeOptional(requestedModelId);
+        if (!string.IsNullOrWhiteSpace(requestedModel))
         {
-            return modelId;
+            return availableModels.FirstOrDefault(model =>
+                model.Equals(requestedModel, StringComparison.OrdinalIgnoreCase));
         }
 
-        return app.AvailableModels
+        var defaultModel = NormalizeOptional(app.DefaultModel);
+        return availableModels.FirstOrDefault(model =>
+                   model.Equals(defaultModel, StringComparison.OrdinalIgnoreCase))
+               ?? availableModels.FirstOrDefault();
+    }
+
+    private static List<string> GetConfiguredModels(ChatAppDto app)
+    {
+        var models = app.AvailableModels
             .Select(NormalizeOptional)
-            .FirstOrDefault(model => !string.IsNullOrWhiteSpace(model))
-            ?? "gpt-4o-mini";
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Select(model => model!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var defaultModel = NormalizeOptional(app.DefaultModel);
+        if (!string.IsNullOrWhiteSpace(defaultModel) &&
+            !models.Contains(defaultModel, StringComparer.OrdinalIgnoreCase))
+        {
+            models.Insert(0, defaultModel);
+        }
+
+        return models;
     }
 
     /// <summary>

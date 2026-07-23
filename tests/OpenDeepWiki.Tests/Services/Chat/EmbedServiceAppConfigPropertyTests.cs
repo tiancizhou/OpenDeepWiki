@@ -1,7 +1,6 @@
 using FsCheck;
 using FsCheck.Fluent;
 using FsCheck.Xunit;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -81,7 +80,7 @@ public class EmbedServiceAppConfigPropertyTests
     }
 
     [Fact]
-    public async Task GetAppConfig_ShouldNotExposeModelConfiguration()
+    public async Task GetAppConfig_ShouldExposeOnlyConfiguredModels()
     {
         using var context = CreateInMemoryContext();
         var chatAppService = new ChatAppService(context, ChatAppLogger);
@@ -100,19 +99,13 @@ public class EmbedServiceAppConfigPropertyTests
         });
 
         var config = await embedService.GetAppConfigAsync(app.AppId, null);
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
-
         Assert.True(config.Valid);
-        Assert.DoesNotContain("availableModels", json);
-        Assert.DoesNotContain("defaultModel", json);
-        Assert.DoesNotContain("gpt-4o", json);
+        Assert.Equal(new[] { "gpt-4o-mini", "gpt-4o" }, config.AvailableModels);
+        Assert.Equal("gpt-4o-mini", config.DefaultModel);
     }
 
     [Fact]
-    public void ResolveConfiguredEmbedModel_ShouldIgnoreRequestedModel()
+    public void ResolveConfiguredEmbedModel_ShouldAcceptConfiguredModel()
     {
         var app = new ChatAppDto
         {
@@ -122,7 +115,21 @@ public class EmbedServiceAppConfigPropertyTests
 
         var model = EmbedService.ResolveConfiguredEmbedModel(app, "expensive-model");
 
-        Assert.Equal("owner-approved-model", model);
+        Assert.Equal("expensive-model", model);
+    }
+
+    [Fact]
+    public void ResolveConfiguredEmbedModel_ShouldRejectUnconfiguredModel()
+    {
+        var app = new ChatAppDto
+        {
+            DefaultModel = "owner-approved-model",
+            AvailableModels = new List<string> { "owner-approved-model", "expensive-model" }
+        };
+
+        var model = EmbedService.ResolveConfiguredEmbedModel(app, "unconfigured-model");
+
+        Assert.Null(model);
     }
 
     [Fact]

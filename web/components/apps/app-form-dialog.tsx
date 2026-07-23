@@ -66,6 +66,7 @@ export function AppFormDialog({
   const [aiProviders, setAiProviders] = useState<AppAiProvider[]>([]);
   const [aiModels, setAiModels] = useState<AppAiModel[]>([]);
   const [aiProviderId, setAiProviderId] = useState("");
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [rateLimitPerMinute, setRateLimitPerMinute] = useState("");
   const [isActive, setIsActive] = useState(true);
@@ -87,6 +88,13 @@ export function AppFormDialog({
       setEnableDomainValidation(app.enableDomainValidation);
       setAllowedDomains(app.allowedDomains.join("\n"));
       setAiProviderId(app.aiProviderId || "");
+      setAvailableModels(
+        app.availableModels.length > 0
+          ? app.availableModels
+          : app.defaultModel
+            ? [app.defaultModel]
+            : []
+      );
       setDefaultModel(app.defaultModel || "");
       setRateLimitPerMinute(app.rateLimitPerMinute?.toString() || "");
       setIsActive(app.isActive);
@@ -106,6 +114,7 @@ export function AppFormDialog({
       setEnableDomainValidation(false);
       setAllowedDomains("");
       setAiProviderId("");
+      setAvailableModels([]);
       setDefaultModel("");
       setRateLimitPerMinute("");
       setIsActive(true);
@@ -152,6 +161,7 @@ export function AppFormDialog({
   useEffect(() => {
     if (!aiProviderId) {
       setAiModels([]);
+      setAvailableModels([]);
       setDefaultModel("");
       return;
     }
@@ -162,11 +172,25 @@ export function AppFormDialog({
       .then((models) => {
         if (!isMounted) return;
         setAiModels(models);
-        setDefaultModel((current) =>
-          current && models.some((model) => model.modelId === current)
-            ? current
-            : models.find((model) => model.isDefault)?.modelId || models[0]?.modelId || ""
-        );
+        setAvailableModels((current) => {
+          const validModels = current.filter((modelId) =>
+            models.some((model) => model.modelId === modelId)
+          );
+          const fallbackModel =
+            models.find((model) => model.isDefault)?.modelId || models[0]?.modelId || "";
+          const nextModels = validModels.length > 0
+            ? validModels
+            : fallbackModel
+              ? [fallbackModel]
+              : [];
+
+          setDefaultModel((currentDefault) =>
+            currentDefault && nextModels.includes(currentDefault)
+              ? currentDefault
+              : nextModels[0] || ""
+          );
+          return nextModels;
+        });
       })
       .catch(() => setError(t("apps.form.loadAiModelsFailed")));
 
@@ -174,6 +198,29 @@ export function AppFormDialog({
       isMounted = false;
     };
   }, [aiProviderId]);
+
+  const handleProviderChange = (providerId: string) => {
+    setAiProviderId(providerId);
+    setAvailableModels([]);
+    setDefaultModel("");
+  };
+
+  const toggleModel = (modelId: string, checked: boolean) => {
+    setAvailableModels((current) => {
+      const nextModels = checked
+        ? current.includes(modelId)
+          ? current
+          : [...current, modelId]
+        : current.filter((item) => item !== modelId);
+
+      setDefaultModel((currentDefault) =>
+        currentDefault && nextModels.includes(currentDefault)
+          ? currentDefault
+          : nextModels[0] || ""
+      );
+      return nextModels;
+    });
+  };
 
   useEffect(() => {
     if (knowledgeRepository === "_none") {
@@ -232,7 +279,7 @@ export function AppFormDialog({
       return;
     }
 
-    if (!defaultModel.trim()) {
+    if (availableModels.length === 0 || !defaultModel.trim()) {
       setError(t("apps.form.defaultModelRequired"));
       return;
     }
@@ -245,7 +292,7 @@ export function AppFormDialog({
         .split("\n")
         .map((domain) => domain.trim())
         .filter(Boolean);
-      const modelsArray = defaultModel.trim() ? [defaultModel.trim()] : [];
+      const modelsArray = availableModels;
       const selectedProvider = aiProviders.find((provider) => provider.id === aiProviderId);
       const selectedKnowledge = knowledgeOptions.find(
         (option) =>
@@ -323,7 +370,9 @@ export function AppFormDialog({
     }
   };
 
-  const modelOptions = aiModels.map((model) => model.modelId);
+  const selectedModelOptions = aiModels.filter((model) =>
+    availableModels.includes(model.modelId)
+  );
   const currentKnowledgeRepository =
     app?.knowledgeOwner && app?.knowledgeRepo
       ? `${app.knowledgeOwner}/${app.knowledgeRepo}`
@@ -487,7 +536,7 @@ export function AppFormDialog({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t("apps.form.aiProvider")} *</Label>
-                <Select value={aiProviderId} onValueChange={setAiProviderId}>
+                <Select value={aiProviderId} onValueChange={handleProviderChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder={t("apps.form.aiProviderPlaceholder")} />
                   </SelectTrigger>
@@ -514,14 +563,47 @@ export function AppFormDialog({
                     />
                   </SelectTrigger>
                   <SelectContent>
-                    {modelOptions.map((model) => (
-                      <SelectItem key={model} value={model}>
-                        {model}
+                    {selectedModelOptions.map((model) => (
+                      <SelectItem key={model.modelId} value={model.modelId}>
+                        {model.name || model.modelId}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t("apps.form.availableModels")} *</Label>
+              {aiModels.length === 0 ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                  {t("chat.model.noModels")}
+                </p>
+              ) : (
+                <div className="grid max-h-44 grid-cols-1 gap-2 overflow-y-auto rounded-md border p-2 sm:grid-cols-2">
+                  {aiModels.map((model) => (
+                    <label
+                      key={model.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/50"
+                    >
+                      <Checkbox
+                        checked={availableModels.includes(model.modelId)}
+                        onCheckedChange={(checked) => toggleModel(model.modelId, checked === true)}
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium">
+                          {model.name || model.modelId}
+                        </span>
+                        {model.name !== model.modelId && (
+                          <span className="block truncate font-mono text-xs text-muted-foreground">
+                            {model.modelId}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
 
             <p className="text-sm text-muted-foreground">

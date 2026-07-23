@@ -199,12 +199,13 @@ public class ChatAppService : IChatAppService
     /// <inheritdoc />
     public async Task<ChatAppDto> CreateAppAsync(string userId, CreateChatAppDto dto, CancellationToken cancellationToken = default)
     {
+        var (availableModels, defaultModel) = NormalizeModelSelection(dto.AvailableModels, dto.DefaultModel);
         var aiProviderId = dto.AiProviderId ?? await CreateProviderFromLegacyAppConfigAsync(
             dto.Name,
             dto.ProviderType,
             dto.BaseUrl,
             dto.ApiKey,
-            dto.DefaultModel ?? dto.AvailableModels?.FirstOrDefault(),
+            defaultModel,
             cancellationToken);
 
         var app = new ChatApp
@@ -223,8 +224,8 @@ public class ChatAppService : IChatAppService
             ProviderType = dto.ProviderType,
             ApiKey = dto.ApiKey,
             BaseUrl = dto.BaseUrl,
-            AvailableModels = dto.AvailableModels != null ? JsonSerializer.Serialize(dto.AvailableModels) : null,
-            DefaultModel = dto.DefaultModel,
+            AvailableModels = SerializeJsonArray(availableModels),
+            DefaultModel = defaultModel,
             RateLimitPerMinute = dto.RateLimitPerMinute,
             KnowledgeOwner = NormalizeOptional(dto.KnowledgeOwner),
             KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo),
@@ -305,8 +306,14 @@ public class ChatAppService : IChatAppService
         if (dto.ProviderType != null) app.ProviderType = dto.ProviderType;
         if (dto.ApiKey != null) app.ApiKey = dto.ApiKey;
         if (dto.BaseUrl != null) app.BaseUrl = dto.BaseUrl;
-        if (dto.AvailableModels != null) app.AvailableModels = JsonSerializer.Serialize(dto.AvailableModels);
-        if (dto.DefaultModel != null) app.DefaultModel = dto.DefaultModel;
+        if (dto.AvailableModels != null || dto.DefaultModel != null)
+        {
+            var (availableModels, defaultModel) = NormalizeModelSelection(
+                dto.AvailableModels ?? ParseJsonArray(app.AvailableModels),
+                dto.DefaultModel ?? app.DefaultModel);
+            app.AvailableModels = SerializeJsonArray(availableModels);
+            app.DefaultModel = defaultModel;
+        }
         if (dto.RateLimitPerMinute.HasValue) app.RateLimitPerMinute = dto.RateLimitPerMinute;
         ApplyKnowledgeBinding(app, dto);
         if (dto.EnabledMcpIds != null) app.EnabledMcpIds = SerializeJsonArray(dto.EnabledMcpIds);
@@ -687,6 +694,33 @@ public class ChatAppService : IChatAppService
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static (List<string> AvailableModels, string DefaultModel) NormalizeModelSelection(
+        IEnumerable<string>? models,
+        string? defaultModel)
+    {
+        var normalizedModels = models?
+            .Select(NormalizeOptional)
+            .Where(model => !string.IsNullOrWhiteSpace(model))
+            .Select(model => model!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+        var normalizedDefault = NormalizeOptional(defaultModel);
+
+        if (!string.IsNullOrWhiteSpace(normalizedDefault) &&
+            !normalizedModels.Contains(normalizedDefault, StringComparer.OrdinalIgnoreCase))
+        {
+            normalizedModels.Insert(0, normalizedDefault);
+        }
+
+        if (normalizedModels.Count == 0)
+        {
+            throw new InvalidOperationException("请至少选择一个可用模型");
+        }
+
+        normalizedDefault ??= normalizedModels[0];
+        return (normalizedModels, normalizedDefault);
     }
 
     private static string? SerializeJsonArray(IEnumerable<string>? values)

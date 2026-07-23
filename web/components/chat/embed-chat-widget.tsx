@@ -51,6 +51,8 @@ interface EmbedConfig {
   errorMessage?: string
   appName?: string
   iconUrl?: string
+  availableModels?: string[]
+  defaultModel?: string
 }
 
 /**
@@ -195,6 +197,7 @@ export function EmbedChatWidget({
   const [isLoading, setIsLoading] = React.useState(true)
   const [isEnabled, setIsEnabled] = React.useState(false)
   const [config, setConfig] = React.useState<EmbedConfig | null>(null)
+  const [selectedModel, setSelectedModel] = React.useState("")
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
   const [input, setInput] = React.useState("")
   const [isSending, setIsSending] = React.useState(false)
@@ -231,6 +234,12 @@ export function EmbedChatWidget({
         if (data.valid) {
           setIsEnabled(true)
           setConfig(data)
+          const models = data.availableModels ?? []
+          setSelectedModel(
+            data.defaultModel && models.includes(data.defaultModel)
+              ? data.defaultModel
+              : models[0] || ""
+          )
         } else {
           console.error('[EmbedChatWidget] ' + t("embed.configInvalid"), data.errorMessage)
           setIsEnabled(false)
@@ -385,6 +394,7 @@ export function EmbedChatWidget({
             headers,
             body: JSON.stringify({
               appId,
+              modelId: selectedModel || undefined,
               messages: allMessages.map(m => ({
                 role: m.role,
                 content: m.content,
@@ -562,7 +572,7 @@ export function EmbedChatWidget({
     
     setIsSending(false)
     abortControllerRef.current = null
-  }, [input, isSending, messages, appId, apiBaseUrl, streamEndpoint, authenticated])
+  }, [input, isSending, messages, appId, apiBaseUrl, streamEndpoint, authenticated, selectedModel])
 
   const handleQuickQuestion = React.useCallback((question: string) => {
     if (!question.trim() || isSending) return
@@ -636,6 +646,7 @@ export function EmbedChatWidget({
   }
 
   const isDark = theme === 'dark'
+  const availableModels = config?.availableModels ?? []
   const canSend = input.trim() && !isSending
   const hasAssistantResponse = messages.some(
     (message) => message.role === 'assistant' && stripThinkBlocks(message.content).length > 0
@@ -681,6 +692,29 @@ export function EmbedChatWidget({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {availableModels.length > 1 && (
+            <select
+              value={selectedModel}
+              onChange={(event) => setSelectedModel(event.target.value)}
+              disabled={isSending}
+              aria-label={t("model.selector")}
+              title={t("model.selector")}
+              className={cn(
+                "h-8 rounded-md border px-2 text-xs outline-none transition-colors",
+                inline ? "max-w-44" : "max-w-28",
+                "focus:ring-2 focus:ring-sky-300 disabled:cursor-not-allowed disabled:opacity-60",
+                isDark
+                  ? "border-gray-600 bg-gray-800 text-gray-100"
+                  : "border-sky-100 bg-white text-slate-700"
+              )}
+            >
+              {availableModels.map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="button"
             onClick={() => void handleClear()}
