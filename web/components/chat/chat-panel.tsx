@@ -390,12 +390,8 @@ export function ChatPanel({
     }
   }, [isOpen, context.currentDocPath])
 
-  // 处理图片上传
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files) return
-
-    Array.from(files).forEach(file => {
+  const addImages = (files: File[]) => {
+    files.forEach(file => {
       // 检查文件类型
       if (!["image/png", "image/jpeg", "image/gif", "image/webp"].includes(file.type)) {
         setError({
@@ -421,9 +417,23 @@ export function ChatPanel({
       }
       reader.readAsDataURL(file)
     })
+  }
+
+  // 处理图片上传
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? [])
+    addImages(files)
 
     // 清空input以便重复选择同一文件
     e.target.value = ""
+  }
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files).filter(file => file.type.startsWith("image/"))
+    if (files.length === 0 || !enableImageUpload || isLoading) return
+
+    event.preventDefault()
+    addImages(files)
   }
 
   // 移除图片
@@ -859,6 +869,7 @@ export function ChatPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder={t("panel.inputPlaceholder")}
                 className="min-h-[100px] resize-none border-0 !bg-transparent p-0 text-sm leading-5 focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground/60 shadow-none"
                 disabled={!isEnabled || enabledModels.length === 0 || isLoading}

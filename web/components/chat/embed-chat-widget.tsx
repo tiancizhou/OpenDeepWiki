@@ -674,9 +674,7 @@ export function EmbedChatWidget({
     }
   }
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? [])
-    event.target.value = ""
+  const addImages = async (files: File[]) => {
     if (files.length === 0) return
 
     if (!canUploadImages) {
@@ -716,6 +714,20 @@ export function EmbedChatWidget({
     if (uploadedImages.length > 0) {
       setImages((current) => [...current, ...uploadedImages])
     }
+  }
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ""
+    void addImages(files)
+  }
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"))
+    if (files.length === 0) return
+
+    event.preventDefault()
+    void addImages(files)
   }
 
   const removeImage = (index: number) => {
@@ -981,6 +993,7 @@ export function EmbedChatWidget({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder={t("embed.inputPlaceholder")}
           rows={1}
           disabled={isSending}
