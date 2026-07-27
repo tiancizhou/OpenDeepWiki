@@ -353,6 +353,7 @@ public class EmbedService : IEmbedService
         }
 
         var knowledgeContexts = ResolveKnowledgeContexts(request, app);
+        var primaryKnowledgeContext = knowledgeContexts.FirstOrDefault();
         var tools = new List<AITool>();
         var repositoriesWithCodeAccess = new List<EmbedKnowledgeContext>();
 
@@ -446,9 +447,9 @@ public class EmbedService : IEmbedService
         {
             BusinessTag = "embed_chat",
             Description = "嵌入式聊天",
-            Repository = BuildRepositoryLabel(knowledgeContext.Owner, knowledgeContext.Repo),
-            Branch = knowledgeContext.Branch,
-            Language = knowledgeContext.Language,
+            Repository = BuildRepositoryLabel(primaryKnowledgeContext?.Owner, primaryKnowledgeContext?.Repo),
+            Branch = primaryKnowledgeContext?.Branch,
+            Language = primaryKnowledgeContext?.Language,
             AppId = request.AppId,
             UserId = request.UserIdentifier,
             ModelId = resolvedModel.ModelId
@@ -696,8 +697,8 @@ public class EmbedService : IEmbedService
                 cachedInputTokens,
                 cacheCreationInputTokens,
                 resolvedModel,
-                knowledgeContext.Owner,
-                knowledgeContext.Repo,
+                primaryKnowledgeContext?.Owner,
+                primaryKnowledgeContext?.Repo,
                 CancellationToken.None);
 
             var answerSummary = responseBuilder.ToString();
