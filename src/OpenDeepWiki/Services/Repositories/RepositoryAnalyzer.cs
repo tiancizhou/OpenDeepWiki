@@ -510,7 +510,6 @@ public class RepositoryAnalyzer : IRepositoryAnalyzer
 
         var cloneOptions = new CloneOptions
         {
-            BranchName = workspace.BranchName,
             RecurseSubmodules = false
         };
 
@@ -541,24 +540,31 @@ public class RepositoryAnalyzer : IRepositoryAnalyzer
                     
                     // Explicitly checkout the target branch after clone
                     using var repo = new GitRepository(workspace.WorkingDirectory);
-                    var targetBranch = repo.Branches[workspace.BranchName] 
+                    var targetBranch = repo.Branches[workspace.BranchName]
                         ?? repo.Branches[$"origin/{workspace.BranchName}"];
-                    
-                    if (targetBranch != null)
+
+                    if (targetBranch == null)
                     {
-                        if (targetBranch.IsRemote)
-                        {
-                            // Create local tracking branch from remote
-                            var localBranch = repo.Branches[workspace.BranchName];
-                            if (localBranch == null)
-                            {
-                                localBranch = repo.CreateBranch(workspace.BranchName, targetBranch.Tip);
-                                repo.Branches.Update(localBranch, b => b.TrackedBranch = targetBranch.CanonicalName);
-                            }
-                            targetBranch = localBranch;
-                        }
-                        Commands.Checkout(repo, targetBranch);
+                        var availableBranches = string.Join(", ", repo.Branches
+                            .Where(branch => !branch.IsRemote)
+                            .Select(branch => branch.FriendlyName)
+                            .OrderBy(branch => branch));
+                        throw new InvalidOperationException(
+                            $"Target branch '{workspace.BranchName}' was not found after cloning. Available branches: {availableBranches}");
                     }
+
+                    if (targetBranch.IsRemote)
+                    {
+                        // Create local tracking branch from remote.
+                        var localBranch = repo.Branches[workspace.BranchName];
+                        if (localBranch == null)
+                        {
+                            localBranch = repo.CreateBranch(workspace.BranchName, targetBranch.Tip);
+                            repo.Branches.Update(localBranch, b => b.TrackedBranch = targetBranch.CanonicalName);
+                        }
+                        targetBranch = localBranch;
+                    }
+                    Commands.Checkout(repo, targetBranch);
                 }, cancellationToken);
 
                 stopwatch.Stop();
