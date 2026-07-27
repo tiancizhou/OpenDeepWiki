@@ -1213,9 +1213,7 @@ public class ChatAssistantService : IChatAssistantService
             {
                 foreach (var image in msg.Images)
                 {
-                    // Assume base64 encoded image
-                    var imageBytes = Convert.FromBase64String(image);
-                    contents.Add(new DataContent(imageBytes, "image/png"));
+                    contents.Add(ChatImageData.Create(image));
                 }
             }
 

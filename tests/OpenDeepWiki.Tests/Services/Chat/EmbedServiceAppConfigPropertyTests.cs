@@ -105,6 +105,33 @@ public class EmbedServiceAppConfigPropertyTests
     }
 
     [Fact]
+    public async Task GetAppConfig_ShouldExposeConfiguredVisionModels()
+    {
+        using var context = CreateInMemoryContext();
+        var chatAppService = new ChatAppService(context, ChatAppLogger);
+        var statsService = new AppStatisticsService(context, StatsLogger);
+        var logService = new ChatLogService(context, LogLogger);
+        var embedService = new EmbedService(
+            context, null!, chatAppService, statsService, logService, null!, TestAiProviderResolver.Instance, null!, RepoOptions, EmbedLogger);
+
+        var app = await chatAppService.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "VisionApp",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test-key",
+            AvailableModels = new List<string> { "vision-model", "text-model" },
+            DefaultModel = "vision-model"
+        });
+        var visionModel = await context.AiModelConfigs.SingleAsync(model => model.ModelId == "vision-model");
+        visionModel.SupportsVision = true;
+        await context.SaveChangesAsync();
+
+        var config = await embedService.GetAppConfigAsync(app.AppId, null);
+
+        Assert.Equal(new[] { "vision-model" }, config.VisionModels);
+    }
+
+    [Fact]
     public void ResolveConfiguredEmbedModel_ShouldAcceptConfiguredModel()
     {
         var app = new ChatAppDto
@@ -164,6 +191,24 @@ public class EmbedServiceAppConfigPropertyTests
 
         Assert.Single(messages);
         Assert.Equal(Microsoft.Extensions.AI.ChatRole.User, messages[0].Role);
+    }
+
+    [Fact]
+    public void BuildChatMessages_ShouldAcceptDataUrlImages()
+    {
+        const string imageDataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        var messages = EmbedService.BuildChatMessages(new List<ChatMessageDto>
+        {
+            new()
+            {
+                Role = "user",
+                Content = "请识别图片",
+                Images = new List<string> { imageDataUrl }
+            }
+        });
+
+        Assert.Single(messages);
+        Assert.Single(messages[0].Contents.OfType<Microsoft.Extensions.AI.DataContent>());
     }
 
 

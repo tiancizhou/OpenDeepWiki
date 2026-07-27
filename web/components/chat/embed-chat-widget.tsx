@@ -2,9 +2,10 @@
 
 import * as React from "react"
 import { useTranslations } from "next-intl"
-import { ChevronLeft, ChevronRight, X, Send, Loader2, Trash2, RefreshCw } from "lucide-react"
+import { ChevronLeft, ChevronRight, X, Send, Loader2, Trash2, RefreshCw, ImagePlus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getToken } from "@/lib/auth-api"
+import { MAX_IMAGE_SIZE, SUPPORTED_IMAGE_TYPES } from "@/lib/image-validation"
 
 /**
  * 嵌入对话组件属性
@@ -53,6 +54,7 @@ interface EmbedConfig {
   iconUrl?: string
   availableModels?: string[]
   defaultModel?: string
+  visionModels?: string[]
 }
 
 /**
@@ -62,6 +64,7 @@ export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  images?: string[]
   timestamp: number
 }
 
@@ -144,6 +147,7 @@ const DEFAULT_MAX_RETRIES = 2
  * 默认重试延迟（毫秒）
  */
 const DEFAULT_RETRY_DELAY_MS = 1000
+const MAX_IMAGES_PER_MESSAGE = 5
 
 function AssistantAvatar() {
   return (
@@ -199,11 +203,13 @@ export function EmbedChatWidget({
   const [config, setConfig] = React.useState<EmbedConfig | null>(null)
   const [selectedModel, setSelectedModel] = React.useState("")
   const [messages, setMessages] = React.useState<ChatMessage[]>([])
+  const [images, setImages] = React.useState<string[]>([])
   const [input, setInput] = React.useState("")
   const [isSending, setIsSending] = React.useState(false)
   const [error, setError] = React.useState<ErrorInfo | null>(null)
   const [lastRequest, setLastRequest] = React.useState<{
     content: string
+    images: string[]
     userMessageId: string
     assistantMessageId: string
   } | null>(null)
@@ -211,6 +217,7 @@ export function EmbedChatWidget({
   const messagesContainerRef = React.useRef<HTMLDivElement>(null)
   const messagesEndRef = React.useRef<HTMLDivElement>(null)
   const inputRef = React.useRef<HTMLTextAreaElement>(null)
+  const imageInputRef = React.useRef<HTMLInputElement>(null)
   const abortControllerRef = React.useRef<AbortController | null>(null)
 
   // 获取图标URL
@@ -297,6 +304,7 @@ export function EmbedChatWidget({
       await onClearHistory()
     }
     setMessages([])
+    setImages([])
     setError(null)
     setLastRequest(null)
   }, [onClearHistory])
@@ -331,9 +339,10 @@ export function EmbedChatWidget({
   }
 
   // 发送消息
-  const handleSend = React.useCallback(async (overrideContent?: string) => {
+  const handleSend = React.useCallback(async (overrideContent?: string, overrideImages?: string[]) => {
     const content = (overrideContent ?? input).trim()
-    if (!content || isSending) return
+    const pendingImages = overrideImages ?? images
+    if ((!content && pendingImages.length === 0) || isSending) return
 
     setError(null)
     setIsSending(true)
@@ -346,10 +355,12 @@ export function EmbedChatWidget({
       id: generateId(),
       role: 'user',
       content,
+      images: pendingImages.length > 0 ? [...pendingImages] : undefined,
       timestamp: Date.now(),
     }
     setMessages(prev => [...prev, userMessage])
     setInput("")
+    setImages([])
 
     // 添加助手消息占位
     const assistantMessage: ChatMessage = {
@@ -363,6 +374,7 @@ export function EmbedChatWidget({
     // 保存请求信息以便重试
     setLastRequest({
       content,
+      images: pendingImages,
       userMessageId: userMessage.id,
       assistantMessageId: assistantMessage.id,
     })
@@ -398,6 +410,7 @@ export function EmbedChatWidget({
               messages: allMessages.map(m => ({
                 role: m.role,
                 content: m.content,
+                images: m.images,
               })),
             }),
           },
@@ -572,7 +585,7 @@ export function EmbedChatWidget({
     
     setIsSending(false)
     abortControllerRef.current = null
-  }, [input, isSending, messages, appId, apiBaseUrl, streamEndpoint, authenticated, selectedModel])
+  }, [input, images, isSending, messages, appId, apiBaseUrl, streamEndpoint, authenticated, selectedModel])
 
   const handleQuickQuestion = React.useCallback((question: string) => {
     if (!question.trim() || isSending) return
@@ -584,11 +597,10 @@ export function EmbedChatWidget({
     if (!lastRequest) return
     
     // 恢复输入状态
-    setInput(lastRequest.content)
     setError(null)
-    
+
     // 重新发送
-    void handleSend(lastRequest.content)
+    void handleSend(lastRequest.content, lastRequest.images)
   }, [lastRequest, handleSend])
 
   // 处理键盘事件
@@ -647,11 +659,68 @@ export function EmbedChatWidget({
 
   const isDark = theme === 'dark'
   const availableModels = config?.availableModels ?? []
-  const canSend = input.trim() && !isSending
+  const visionModels = config?.visionModels ?? []
+  const canUploadImages = selectedModel !== "" && visionModels.includes(selectedModel)
+  const canSend = (input.trim() || images.length > 0) && !isSending
   const hasAssistantResponse = messages.some(
     (message) => message.role === 'assistant' && stripThinkBlocks(message.content).length > 0
   )
   const visibleError = error && !(isCompatibilityError(error) && hasAssistantResponse)
+
+  const handleModelChange = (modelId: string) => {
+    setSelectedModel(modelId)
+    if (!visionModels.includes(modelId)) {
+      setImages([])
+    }
+  }
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ""
+    if (files.length === 0) return
+
+    if (!canUploadImages) {
+      setError({ message: "当前模型不支持图片识别", retryable: false })
+      return
+    }
+
+    const uploadedImages: string[] = []
+    for (const file of files) {
+      if (images.length + uploadedImages.length >= MAX_IMAGES_PER_MESSAGE) {
+        setError({ message: `单次最多上传 ${MAX_IMAGES_PER_MESSAGE} 张图片`, retryable: false })
+        break
+      }
+      if (!SUPPORTED_IMAGE_TYPES.includes(file.type as typeof SUPPORTED_IMAGE_TYPES[number])) {
+        setError({ message: t("image.unsupportedFormat"), retryable: false })
+        continue
+      }
+      if (file.size > MAX_IMAGE_SIZE) {
+        setError({ message: t("image.sizeTooLarge"), retryable: false })
+        continue
+      }
+
+      const imageDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      }).catch(() => null)
+
+      if (imageDataUrl) {
+        uploadedImages.push(imageDataUrl)
+      } else {
+        setError({ message: t("image.readFailed"), retryable: false })
+      }
+    }
+
+    if (uploadedImages.length > 0) {
+      setImages((current) => [...current, ...uploadedImages])
+    }
+  }
+
+  const removeImage = (index: number) => {
+    setImages((current) => current.filter((_, imageIndex) => imageIndex !== index))
+  }
 
   const renderChatPanel = (inline = false) => (
     <div
@@ -695,7 +764,7 @@ export function EmbedChatWidget({
           {availableModels.length > 1 && (
             <select
               value={selectedModel}
-              onChange={(event) => setSelectedModel(event.target.value)}
+              onChange={(event) => handleModelChange(event.target.value)}
               disabled={isSending}
               aria-label={t("model.selector")}
               title={t("model.selector")}
@@ -796,6 +865,18 @@ export function EmbedChatWidget({
                     )
               )}
             >
+              {message.images && message.images.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {message.images.map((image, index) => (
+                    <img
+                      key={`${message.id}-image-${index}`}
+                      src={image}
+                      alt={t("image.preview", { index: index + 1 })}
+                      className="h-20 w-20 rounded-md border border-white/30 object-cover"
+                    />
+                  ))}
+                </div>
+              )}
               {message.role === 'assistant' && !message.content && isSending ? (
                 <div className="flex items-center gap-1">
                   <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
@@ -839,12 +920,62 @@ export function EmbedChatWidget({
       )}
 
       {/* 输入区域 */}
+      {images.length > 0 && (
+        <div className={cn(
+          "flex shrink-0 flex-wrap gap-2 border-t px-4 pt-3",
+          isDark ? "border-gray-700 bg-gray-900" : "border-sky-100 bg-sky-50/70"
+        )}>
+          {images.map((image, index) => (
+            <div key={`pending-image-${index}`} className="group relative">
+              <img
+                src={image}
+                alt={t("image.preview", { index: index + 1 })}
+                className="h-14 w-14 rounded-md border border-sky-100 object-cover"
+              />
+              <button
+                type="button"
+                onClick={() => removeImage(index)}
+                disabled={isSending}
+                className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 disabled:cursor-not-allowed"
+                aria-label={t("image.remove", { index: index + 1 })}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <div
         className={cn(
           "flex shrink-0 items-end gap-3 border-t p-4",
           isDark ? "border-gray-700" : "border-sky-100 bg-sky-50/70"
         )}
       >
+        <input
+          ref={imageInputRef}
+          type="file"
+          accept={SUPPORTED_IMAGE_TYPES.join(",")}
+          multiple
+          className="hidden"
+          onChange={handleImageUpload}
+          disabled={!canUploadImages || isSending}
+        />
+        <button
+          type="button"
+          onClick={() => imageInputRef.current?.click()}
+          disabled={!canUploadImages || isSending || images.length >= MAX_IMAGES_PER_MESSAGE}
+          className={cn(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-md border transition-colors",
+            isDark
+              ? "border-gray-600 text-gray-200 hover:bg-gray-800"
+              : "border-sky-100 bg-white text-sky-700 hover:bg-sky-100",
+            "disabled:cursor-not-allowed disabled:opacity-40"
+          )}
+          title={canUploadImages ? t("panel.uploadImage") : "当前模型不支持图片识别"}
+          aria-label={canUploadImages ? t("panel.uploadImage") : "当前模型不支持图片识别"}
+        >
+          <ImagePlus className="h-5 w-5" />
+        </button>
         <textarea
           ref={inputRef}
           value={input}

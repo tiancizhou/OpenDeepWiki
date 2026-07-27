@@ -30,6 +30,7 @@ public class EmbedConfigDto
     public string? IconUrl { get; set; }
     public List<string> AvailableModels { get; set; } = new();
     public string? DefaultModel { get; set; }
+    public List<string> VisionModels { get; set; } = new();
 }
 
 /// <summary>
@@ -262,13 +263,17 @@ public class EmbedService : IEmbedService
             };
         }
 
+        var availableModels = GetConfiguredModels(app);
+        var visionModels = await GetVisionModelsAsync(app.AiProviderId, availableModels, cancellationToken);
+
         return new EmbedConfigDto
         {
             Valid = true,
             AppName = app.Name,
             IconUrl = app.IconUrl,
-            AvailableModels = GetConfiguredModels(app),
-            DefaultModel = ResolveConfiguredEmbedModel(app)
+            AvailableModels = availableModels,
+            DefaultModel = ResolveConfiguredEmbedModel(app),
+            VisionModels = visionModels
         };
     }
 
@@ -330,6 +335,19 @@ public class EmbedService : IEmbedService
                 Data = SSEErrorResponse.CreateNonRetryable(
                     ChatErrorCodes.MODEL_UNAVAILABLE,
                     "所选模型不在该应用的可用模型列表中")
+            };
+            yield break;
+        }
+
+        if (request.Messages.Any(message => message.Images is { Count: > 0 }) &&
+            !await SupportsVisionAsync(app.AiProviderId, modelId, cancellationToken))
+        {
+            yield return new SSEEvent
+            {
+                Type = SSEEventType.Error,
+                Data = SSEErrorResponse.CreateNonRetryable(
+                    ChatErrorCodes.MODEL_UNAVAILABLE,
+                    "所选模型不支持图片识别")
             };
             yield break;
         }
@@ -876,6 +894,47 @@ public class EmbedService : IEmbedService
         return models;
     }
 
+    private async Task<List<string>> GetVisionModelsAsync(
+        string? providerId,
+        List<string> availableModels,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerId) || availableModels.Count == 0)
+        {
+            return new List<string>();
+        }
+
+        return await _context.AiModelConfigs
+            .Where(model =>
+                model.ProviderId == providerId &&
+                availableModels.Contains(model.ModelId) &&
+                model.SupportsVision &&
+                model.IsActive &&
+                !model.IsDeleted)
+            .Select(model => model.ModelId)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<bool> SupportsVisionAsync(
+        string? providerId,
+        string modelId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(providerId))
+        {
+            return false;
+        }
+
+        return await _context.AiModelConfigs.AnyAsync(
+            model =>
+                model.ProviderId == providerId &&
+                model.ModelId == modelId &&
+                model.SupportsVision &&
+                model.IsActive &&
+                !model.IsDeleted,
+            cancellationToken);
+    }
+
     /// <summary>
     /// Builds chat messages from DTOs.
     /// </summary>
@@ -905,8 +964,7 @@ public class EmbedService : IEmbedService
             {
                 foreach (var image in msg.Images)
                 {
-                    var imageBytes = Convert.FromBase64String(image);
-                    contents.Add(new DataContent(imageBytes, "image/png"));
+                    contents.Add(ChatImageData.Create(image));
                 }
             }
 
