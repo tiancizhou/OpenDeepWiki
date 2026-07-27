@@ -763,21 +763,22 @@ Glob Examples:
         return sb.ToString();
     }
 
-    public List<AITool> GetTools()
+    public List<AITool> GetTools(string? toolSuffix = null)
     {
+        var suffix = string.IsNullOrWhiteSpace(toolSuffix) ? string.Empty : $"_{toolSuffix}";
         return new List<AITool>
         {
             AIFunctionFactory.Create(ReadAsync, new AIFunctionFactoryOptions
             {
-                Name = "ReadFile"
+                Name = $"ReadFile{suffix}"
             }),
             AIFunctionFactory.Create(ListFilesAsync, new AIFunctionFactoryOptions
             {
-                Name = "ListFiles"
+                Name = $"ListFiles{suffix}"
             }),
             AIFunctionFactory.Create(GrepAsync, new AIFunctionFactoryOptions
             {
-                Name = "Grep"
+                Name = $"Grep{suffix}"
             })
         };
     }

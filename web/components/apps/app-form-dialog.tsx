@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, X } from "lucide-react";
 import {
   createApp,
   updateApp,
@@ -32,6 +32,7 @@ import {
   AppMcpOption,
   AppAiProvider,
   AppKnowledgeOption,
+  ChatAppKnowledgeBase,
   getAppAiModels,
   getAppAiProviders,
   getAppKnowledgeOptions,
@@ -74,6 +75,7 @@ export function AppFormDialog({
   const [knowledgeRepository, setKnowledgeRepository] = useState("_none");
   const [knowledgeBranch, setKnowledgeBranch] = useState("");
   const [knowledgeLanguage, setKnowledgeLanguage] = useState("");
+  const [knowledgeBases, setKnowledgeBases] = useState<ChatAppKnowledgeBase[]>([]);
   const [mcpOptions, setMcpOptions] = useState<AppMcpOption[]>([]);
   const [enabledMcpIds, setEnabledMcpIds] = useState<string[]>([]);
 
@@ -105,6 +107,18 @@ export function AppFormDialog({
       );
       setKnowledgeBranch(app.knowledgeBranch || "");
       setKnowledgeLanguage(app.knowledgeLanguage || "");
+      setKnowledgeBases(
+        app.knowledgeBases?.length > 0
+          ? app.knowledgeBases
+          : app.knowledgeOwner && app.knowledgeRepo
+            ? [{
+                owner: app.knowledgeOwner,
+                repo: app.knowledgeRepo,
+                branch: app.knowledgeBranch,
+                language: app.knowledgeLanguage,
+              }]
+            : []
+      );
       setEnabledMcpIds(app.enabledMcpIds || []);
     } else {
       setName("");
@@ -121,6 +135,7 @@ export function AppFormDialog({
       setKnowledgeRepository("_none");
       setKnowledgeBranch("");
       setKnowledgeLanguage("");
+      setKnowledgeBases([]);
       setEnabledMcpIds([]);
     }
 
@@ -300,20 +315,27 @@ export function AppFormDialog({
           option.branch === knowledgeBranch &&
           option.language === knowledgeLanguage
       );
-      const knowledgeBinding =
-        knowledgeRepository !== "_none" && selectedKnowledge
-          ? {
-              knowledgeOwner: selectedKnowledge.owner,
-              knowledgeRepo: selectedKnowledge.repo,
-              knowledgeBranch: selectedKnowledge.branch,
-              knowledgeLanguage: selectedKnowledge.language,
-            }
-          : {
-              knowledgeOwner: "",
-              knowledgeRepo: "",
-              knowledgeBranch: "",
-              knowledgeLanguage: "",
-            };
+      const selectedKnowledgeBases = selectedKnowledge && !knowledgeBases.some((knowledgeBase) =>
+        knowledgeBase.owner === selectedKnowledge.owner &&
+        knowledgeBase.repo === selectedKnowledge.repo &&
+        knowledgeBase.branch === selectedKnowledge.branch &&
+        knowledgeBase.language === selectedKnowledge.language
+      )
+        ? [...knowledgeBases, {
+            owner: selectedKnowledge.owner,
+            repo: selectedKnowledge.repo,
+            branch: selectedKnowledge.branch,
+            language: selectedKnowledge.language,
+          }]
+        : knowledgeBases;
+      const primaryKnowledgeBase = selectedKnowledgeBases[0];
+      const knowledgeBinding = {
+        knowledgeBases: selectedKnowledgeBases,
+        knowledgeOwner: primaryKnowledgeBase?.owner || "",
+        knowledgeRepo: primaryKnowledgeBase?.repo || "",
+        knowledgeBranch: primaryKnowledgeBase?.branch || "",
+        knowledgeLanguage: primaryKnowledgeBase?.language || "",
+      };
 
       if (isEditing && app) {
         const updateDto: UpdateChatAppDto = {
@@ -435,6 +457,35 @@ export function AppFormDialog({
         ? Array.from(new Set([...current, mcpId]))
         : current.filter((id) => id !== mcpId)
     );
+  };
+
+  const addKnowledgeBase = () => {
+    const selectedKnowledge = knowledgeOptions.find(
+      (option) =>
+        `${option.owner}/${option.repo}` === knowledgeRepository &&
+        option.branch === knowledgeBranch &&
+        option.language === knowledgeLanguage
+    );
+    if (!selectedKnowledge) return;
+
+    setKnowledgeBases((current) => {
+      const next = {
+        owner: selectedKnowledge.owner,
+        repo: selectedKnowledge.repo,
+        branch: selectedKnowledge.branch,
+        language: selectedKnowledge.language,
+      };
+      return current.some((item) =>
+        item.owner === next.owner &&
+        item.repo === next.repo &&
+        item.branch === next.branch &&
+        item.language === next.language
+      ) ? current : [...current, next];
+    });
+  };
+
+  const removeKnowledgeBase = (index: number) => {
+    setKnowledgeBases((current) => current.filter((_, itemIndex) => itemIndex !== index));
   };
 
   return (
@@ -656,7 +707,8 @@ export function AppFormDialog({
             </div>
 
             {knowledgeRepository !== "_none" && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>{t("apps.form.branch")}</Label>
                   <Select
@@ -695,6 +747,44 @@ export function AppFormDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addKnowledgeBase}
+                  disabled={!knowledgeBranch || !knowledgeLanguage}
+                  className="gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  添加当前仓库
+                </Button>
+              </div>
+            )}
+
+            {knowledgeBases.length > 0 && (
+              <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                <p className="text-sm font-medium">已绑定仓库（{knowledgeBases.length}）</p>
+                <div className="space-y-2">
+                  {knowledgeBases.map((knowledgeBase, index) => (
+                    <div key={`${knowledgeBase.owner}/${knowledgeBase.repo}@${knowledgeBase.branch}/${knowledgeBase.language}`} className="flex items-center justify-between gap-3 rounded-md bg-background px-3 py-2 text-sm">
+                      <span className="min-w-0 truncate">
+                        {knowledgeBase.owner}/{knowledgeBase.repo} · {knowledgeBase.branch || "default"} · {knowledgeBase.language || "-"}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeKnowledgeBase(index)}
+                        className="h-7 w-7 shrink-0"
+                        aria-label={`移除 ${knowledgeBase.owner}/${knowledgeBase.repo}`}
+                        title="移除仓库"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

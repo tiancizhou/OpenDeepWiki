@@ -448,6 +448,7 @@ public static class DbInitializer
         await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "KnowledgeRepo", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "KnowledgeBranch", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "KnowledgeLanguage", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "KnowledgeBases", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "EnabledMcpIds", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "AiModelConfigs", "ProviderType", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "AiModelConfigs", "CacheHitTokenPrice", "TEXT");
@@ -689,6 +690,7 @@ public static class DbInitializer
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeRepo"" VARCHAR(100);
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeBranch"" VARCHAR(200);
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeLanguage"" VARCHAR(50);
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""KnowledgeBases"" TEXT;
             ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""EnabledMcpIds"" TEXT;
             ALTER TABLE ""AiModelConfigs"" ADD COLUMN IF NOT EXISTS ""ProviderType"" TEXT;
             ALTER TABLE ""AiModelConfigs"" ADD COLUMN IF NOT EXISTS ""CacheHitTokenPrice"" NUMERIC(18, 8);

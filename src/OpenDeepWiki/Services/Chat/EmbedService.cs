@@ -352,14 +352,13 @@ public class EmbedService : IEmbedService
             yield break;
         }
 
-        var knowledgeContext = ResolveKnowledgeContext(request, app);
-
-        // Calculate repository path from Owner/Repo
-        GitTool? gitTool = null;
+        var knowledgeContexts = ResolveKnowledgeContexts(request, app);
         var tools = new List<AITool>();
+        var repositoriesWithCodeAccess = new List<EmbedKnowledgeContext>();
 
-        if (knowledgeContext.HasRepository)
+        for (var index = 0; index < knowledgeContexts.Count; index++)
         {
+            var knowledgeContext = knowledgeContexts[index];
             var repositoryPath = GetRepositoryPath(knowledgeContext.Owner!, knowledgeContext.Repo!);
             if (Directory.Exists(repositoryPath))
             {
@@ -371,8 +370,9 @@ public class EmbedService : IEmbedService
                         CheckoutBranch(repositoryPath, knowledgeContext.Branch);
                     }
                     
-                    gitTool = new GitTool(repositoryPath);
-                    tools.AddRange(gitTool.GetTools());
+                    var gitTool = new GitTool(repositoryPath);
+                    tools.AddRange(gitTool.GetTools(knowledgeContexts.Count > 1 ? $"repo{index + 1}" : null));
+                    repositoriesWithCodeAccess.Add(knowledgeContext);
                     _logger.LogInformation("GitTool initialized for app {AppId} with repository {Owner}/{Repo}@{Branch}",
                         request.AppId, knowledgeContext.Owner, knowledgeContext.Repo, knowledgeContext.Branch);
                 }
@@ -387,17 +387,21 @@ public class EmbedService : IEmbedService
             }
         }
 
-        if (knowledgeContext.HasRepository && !string.IsNullOrWhiteSpace(knowledgeContext.Branch) &&
-            !string.IsNullOrWhiteSpace(knowledgeContext.Language))
+        for (var index = 0; index < knowledgeContexts.Count; index++)
         {
-            var chatDocReaderTool = await ChatDocReaderTool.CreateAsync(
-                _context,
-                knowledgeContext.Owner!,
-                knowledgeContext.Repo!,
-                knowledgeContext.Branch!,
-                knowledgeContext.Language!,
-                cancellationToken);
-            tools.Add(chatDocReaderTool.GetTool());
+            var knowledgeContext = knowledgeContexts[index];
+            if (!string.IsNullOrWhiteSpace(knowledgeContext.Branch) &&
+                !string.IsNullOrWhiteSpace(knowledgeContext.Language))
+            {
+                var chatDocReaderTool = await ChatDocReaderTool.CreateAsync(
+                    _context,
+                    knowledgeContext.Owner!,
+                    knowledgeContext.Repo!,
+                    knowledgeContext.Branch!,
+                    knowledgeContext.Language!,
+                    cancellationToken);
+                tools.Add(chatDocReaderTool.GetTool(knowledgeContexts.Count > 1 ? $"ReadDoc_repo{index + 1}" : "ReadDoc"));
+            }
         }
 
         if (app.EnabledMcpIds.Count > 0)
@@ -417,11 +421,12 @@ public class EmbedService : IEmbedService
             app.Name,
             app.Description,
             app.SystemPrompt,
-            knowledgeContext.Owner,
-            knowledgeContext.Repo,
-            knowledgeContext.Branch,
-            knowledgeContext.Language,
-            gitTool != null);
+            knowledgeContexts.FirstOrDefault()?.Owner,
+            knowledgeContexts.FirstOrDefault()?.Repo,
+            knowledgeContexts.FirstOrDefault()?.Branch,
+            knowledgeContexts.FirstOrDefault()?.Language,
+            repositoriesWithCodeAccess.Count > 0,
+            knowledgeContexts);
 
         // Create agent with app's AI configuration
         var agentOptions = new ChatClientAgentOptions
@@ -845,14 +850,28 @@ public class EmbedService : IEmbedService
         return false;
     }
 
-    private static EmbedKnowledgeContext ResolveKnowledgeContext(EmbedChatRequest request, ChatAppDto app)
+    private static List<EmbedKnowledgeContext> ResolveKnowledgeContexts(EmbedChatRequest request, ChatAppDto app)
     {
+        if (app.KnowledgeBases.Count > 1)
+        {
+            return app.KnowledgeBases
+                .Where(knowledgeBase => !string.IsNullOrWhiteSpace(knowledgeBase.Owner) && !string.IsNullOrWhiteSpace(knowledgeBase.Repo))
+                .Select(knowledgeBase => new EmbedKnowledgeContext(
+                    NormalizeOptional(knowledgeBase.Owner),
+                    NormalizeOptional(knowledgeBase.Repo),
+                    NormalizeOptional(knowledgeBase.Branch),
+                    NormalizeOptional(knowledgeBase.Language)))
+                .ToList();
+        }
+
         var owner = NormalizeOptional(request.Owner) ?? NormalizeOptional(app.KnowledgeOwner);
         var repo = NormalizeOptional(request.Repo) ?? NormalizeOptional(app.KnowledgeRepo);
         var branch = NormalizeOptional(request.Branch) ?? NormalizeOptional(app.KnowledgeBranch);
         var language = NormalizeOptional(app.KnowledgeLanguage);
 
-        return new EmbedKnowledgeContext(owner, repo, branch, language);
+        return string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo)
+            ? new List<EmbedKnowledgeContext>()
+            : new List<EmbedKnowledgeContext> { new(owner, repo, branch, language) };
     }
 
     private static string? NormalizeOptional(string? value)
@@ -1001,7 +1020,8 @@ public class EmbedService : IEmbedService
         string? repo,
         string? branch,
         string? language,
-        bool hasCodeAccess)
+        bool hasCodeAccess,
+        IReadOnlyList<EmbedKnowledgeContext>? knowledgeContexts = null)
     {
         var sb = new StringBuilder();
 
@@ -1047,6 +1067,10 @@ public class EmbedService : IEmbedService
             sb.AppendLine();
             sb.AppendLine("Use these tools proactively to gather context before answering.");
             sb.AppendLine("NEVER guess about code - always verify with actual source files.");
+            if (knowledgeContexts is { Count: > 1 })
+            {
+                sb.AppendLine("For multi-repository questions, query the relevant repository tools before combining findings.");
+            }
         }
         else if (string.IsNullOrWhiteSpace(owner) || string.IsNullOrWhiteSpace(repo))
         {
@@ -1161,6 +1185,15 @@ public class EmbedService : IEmbedService
         if (!string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
         {
             sb.AppendLine($"Repository: {owner}/{repo}");
+        }
+        if (knowledgeContexts is { Count: > 1 })
+        {
+            sb.AppendLine("Repositories and tools:");
+            for (var index = 0; index < knowledgeContexts.Count; index++)
+            {
+                var knowledgeContext = knowledgeContexts[index];
+                sb.AppendLine($"- repo{index + 1}: {knowledgeContext.Owner}/{knowledgeContext.Repo}@{knowledgeContext.Branch ?? "default"}; use ReadFile_repo{index + 1}, ListFiles_repo{index + 1}, Grep_repo{index + 1}, and ReadDoc_repo{index + 1} when available.");
+            }
         }
         if (!string.IsNullOrWhiteSpace(branch))
         {

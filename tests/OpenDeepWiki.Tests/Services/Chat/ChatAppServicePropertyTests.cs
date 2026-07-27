@@ -206,6 +206,31 @@ public class ChatAppServicePropertyTests
     }
 
     [Fact]
+    public async Task CreateAppAsync_ShouldPersistMultipleKnowledgeBases()
+    {
+        using var context = CreateContext();
+        var service = new ChatAppService(context, NullLogger);
+
+        var app = await service.CreateAppAsync("user1", new CreateChatAppDto
+        {
+            Name = "Full Stack Bot",
+            ProviderType = "OpenAI",
+            ApiKey = "sk-test",
+            AvailableModels = new List<string> { "gpt-4o-mini" },
+            DefaultModel = "gpt-4o-mini",
+            KnowledgeBases = new List<ChatAppKnowledgeBaseDto>
+            {
+                new() { Owner = "team", Repo = "portal-web", Branch = "main", Language = "zh" },
+                new() { Owner = "team", Repo = "portal-api", Branch = "master", Language = "zh" }
+            }
+        });
+
+        Assert.Equal(2, app.KnowledgeBases.Count);
+        Assert.Equal("portal-web", app.KnowledgeRepo);
+        Assert.Contains(app.KnowledgeBases, knowledgeBase => knowledgeBase.Repo == "portal-api");
+    }
+
+    [Fact]
     public async Task CreateAppAsync_ShouldPersistSystemPrompt()
     {
         using var context = CreateContext();

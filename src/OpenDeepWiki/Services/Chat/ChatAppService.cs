@@ -29,6 +29,7 @@ public class CreateChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<ChatAppKnowledgeBaseDto>? KnowledgeBases { get; set; }
     public List<string>? EnabledMcpIds { get; set; }
 }
 
@@ -55,6 +56,7 @@ public class UpdateChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<ChatAppKnowledgeBaseDto>? KnowledgeBases { get; set; }
     public List<string>? EnabledMcpIds { get; set; }
 }
 
@@ -86,9 +88,18 @@ public class ChatAppDto
     public string? KnowledgeRepo { get; set; }
     public string? KnowledgeBranch { get; set; }
     public string? KnowledgeLanguage { get; set; }
+    public List<ChatAppKnowledgeBaseDto> KnowledgeBases { get; set; } = new();
     public List<string> EnabledMcpIds { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+}
+
+public class ChatAppKnowledgeBaseDto
+{
+    public string Owner { get; set; } = string.Empty;
+    public string Repo { get; set; } = string.Empty;
+    public string? Branch { get; set; }
+    public string? Language { get; set; }
 }
 
 public class ChatAppAccessUserDto
@@ -208,6 +219,8 @@ public class ChatAppService : IChatAppService
             defaultModel,
             cancellationToken);
 
+        var knowledgeBases = NormalizeKnowledgeBases(dto.KnowledgeBases, dto.KnowledgeOwner, dto.KnowledgeRepo, dto.KnowledgeBranch, dto.KnowledgeLanguage);
+        var primaryKnowledgeBase = knowledgeBases.FirstOrDefault();
         var app = new ChatApp
         {
             Id = Guid.NewGuid(),
@@ -227,10 +240,11 @@ public class ChatAppService : IChatAppService
             AvailableModels = SerializeJsonArray(availableModels),
             DefaultModel = defaultModel,
             RateLimitPerMinute = dto.RateLimitPerMinute,
-            KnowledgeOwner = NormalizeOptional(dto.KnowledgeOwner),
-            KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo),
-            KnowledgeBranch = NormalizeOptional(dto.KnowledgeBranch),
-            KnowledgeLanguage = NormalizeOptional(dto.KnowledgeLanguage),
+            KnowledgeOwner = primaryKnowledgeBase?.Owner,
+            KnowledgeRepo = primaryKnowledgeBase?.Repo,
+            KnowledgeBranch = primaryKnowledgeBase?.Branch,
+            KnowledgeLanguage = primaryKnowledgeBase?.Language,
+            KnowledgeBases = SerializeKnowledgeBases(knowledgeBases),
             EnabledMcpIds = dto.EnabledMcpIds != null ? SerializeJsonArray(dto.EnabledMcpIds) : null,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
@@ -669,6 +683,7 @@ public class ChatAppService : IChatAppService
             KnowledgeRepo = app.KnowledgeRepo,
             KnowledgeBranch = app.KnowledgeBranch,
             KnowledgeLanguage = app.KnowledgeLanguage,
+            KnowledgeBases = ParseKnowledgeBases(app.KnowledgeBases, app.KnowledgeOwner, app.KnowledgeRepo, app.KnowledgeBranch, app.KnowledgeLanguage),
             EnabledMcpIds = ParseJsonArray(app.EnabledMcpIds),
             CreatedAt = app.CreatedAt,
             UpdatedAt = app.UpdatedAt
@@ -677,6 +692,18 @@ public class ChatAppService : IChatAppService
 
     private static void ApplyKnowledgeBinding(ChatApp app, UpdateChatAppDto dto)
     {
+        if (dto.KnowledgeBases != null)
+        {
+            var knowledgeBases = NormalizeKnowledgeBases(dto.KnowledgeBases, null, null, null, null);
+            var primaryKnowledgeBase = knowledgeBases.FirstOrDefault();
+            app.KnowledgeOwner = primaryKnowledgeBase?.Owner;
+            app.KnowledgeRepo = primaryKnowledgeBase?.Repo;
+            app.KnowledgeBranch = primaryKnowledgeBase?.Branch;
+            app.KnowledgeLanguage = primaryKnowledgeBase?.Language;
+            app.KnowledgeBases = SerializeKnowledgeBases(knowledgeBases);
+            return;
+        }
+
         if (dto.KnowledgeOwner == null &&
             dto.KnowledgeRepo == null &&
             dto.KnowledgeBranch == null &&
@@ -689,6 +716,74 @@ public class ChatAppService : IChatAppService
         app.KnowledgeRepo = NormalizeOptional(dto.KnowledgeRepo);
         app.KnowledgeBranch = NormalizeOptional(dto.KnowledgeBranch);
         app.KnowledgeLanguage = NormalizeOptional(dto.KnowledgeLanguage);
+        app.KnowledgeBases = SerializeKnowledgeBases(NormalizeKnowledgeBases(
+            null,
+            app.KnowledgeOwner,
+            app.KnowledgeRepo,
+            app.KnowledgeBranch,
+            app.KnowledgeLanguage));
+    }
+
+    private static List<ChatAppKnowledgeBaseDto> NormalizeKnowledgeBases(
+        IEnumerable<ChatAppKnowledgeBaseDto>? knowledgeBases,
+        string? legacyOwner,
+        string? legacyRepo,
+        string? legacyBranch,
+        string? legacyLanguage)
+    {
+        var normalized = knowledgeBases?
+            .Select(knowledgeBase => new ChatAppKnowledgeBaseDto
+            {
+                Owner = NormalizeOptional(knowledgeBase.Owner) ?? string.Empty,
+                Repo = NormalizeOptional(knowledgeBase.Repo) ?? string.Empty,
+                Branch = NormalizeOptional(knowledgeBase.Branch),
+                Language = NormalizeOptional(knowledgeBase.Language)
+            })
+            .Where(knowledgeBase => !string.IsNullOrWhiteSpace(knowledgeBase.Owner) && !string.IsNullOrWhiteSpace(knowledgeBase.Repo))
+            .DistinctBy(knowledgeBase => $"{knowledgeBase.Owner}/{knowledgeBase.Repo}@{knowledgeBase.Branch}/{knowledgeBase.Language}", StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<ChatAppKnowledgeBaseDto>();
+
+        if (normalized.Count == 0)
+        {
+            var owner = NormalizeOptional(legacyOwner);
+            var repo = NormalizeOptional(legacyRepo);
+            if (!string.IsNullOrWhiteSpace(owner) && !string.IsNullOrWhiteSpace(repo))
+            {
+                normalized.Add(new ChatAppKnowledgeBaseDto
+                {
+                    Owner = owner,
+                    Repo = repo,
+                    Branch = NormalizeOptional(legacyBranch),
+                    Language = NormalizeOptional(legacyLanguage)
+                });
+            }
+        }
+
+        return normalized;
+    }
+
+    private static string? SerializeKnowledgeBases(IEnumerable<ChatAppKnowledgeBaseDto> knowledgeBases)
+    {
+        var values = knowledgeBases.ToList();
+        return values.Count > 0 ? JsonSerializer.Serialize(values) : null;
+    }
+
+    private static List<ChatAppKnowledgeBaseDto> ParseKnowledgeBases(
+        string? json,
+        string? legacyOwner,
+        string? legacyRepo,
+        string? legacyBranch,
+        string? legacyLanguage)
+    {
+        try
+        {
+            var knowledgeBases = JsonSerializer.Deserialize<List<ChatAppKnowledgeBaseDto>>(json ?? string.Empty);
+            return NormalizeKnowledgeBases(knowledgeBases, legacyOwner, legacyRepo, legacyBranch, legacyLanguage);
+        }
+        catch (JsonException)
+        {
+            return NormalizeKnowledgeBases(null, legacyOwner, legacyRepo, legacyBranch, legacyLanguage);
+        }
     }
 
     private static string? NormalizeOptional(string? value)

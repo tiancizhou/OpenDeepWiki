@@ -180,13 +180,13 @@ public class ChatDocReaderTool
     /// <summary>
     /// Gets the AI tool with dynamic description including document catalog.
     /// </summary>
-    public AITool GetTool()
+    public AITool GetTool(string toolName = "ReadDoc")
     {
         var description = BuildToolDescription();
         
         return AIFunctionFactory.Create(ReadAsync, new AIFunctionFactoryOptions
         {
-            Name = "ReadDoc",
+            Name = toolName,
             Description = description
         });
     }

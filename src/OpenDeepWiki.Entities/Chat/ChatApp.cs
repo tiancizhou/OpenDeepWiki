@@ -98,6 +98,12 @@ public class ChatApp : AggregateRoot<Guid>
     public string? KnowledgeLanguage { get; set; }
 
     /// <summary>
+    /// Bound knowledge repositories for embedded chat (JSON array).
+    /// The legacy Knowledge* fields remain as the primary repository for compatibility.
+    /// </summary>
+    public string? KnowledgeBases { get; set; }
+
+    /// <summary>
     /// MCP tools enabled for this embedded application (JSON array of MCP config IDs).
     /// </summary>
     [StringLength(2000)]

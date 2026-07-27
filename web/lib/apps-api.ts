@@ -30,6 +30,7 @@ export interface CreateChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  knowledgeBases?: ChatAppKnowledgeBase[]
   enabledMcpIds?: string[]
 }
 
@@ -55,6 +56,7 @@ export interface UpdateChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  knowledgeBases?: ChatAppKnowledgeBase[]
   enabledMcpIds?: string[]
 }
 
@@ -84,9 +86,17 @@ export interface ChatAppDto {
   knowledgeRepo?: string
   knowledgeBranch?: string
   knowledgeLanguage?: string
+  knowledgeBases: ChatAppKnowledgeBase[]
   enabledMcpIds: string[]
   createdAt: string
   updatedAt?: string
+}
+
+export interface ChatAppKnowledgeBase {
+  owner: string
+  repo: string
+  branch?: string
+  language?: string
 }
 
 export interface ChatAppAccessUser {
