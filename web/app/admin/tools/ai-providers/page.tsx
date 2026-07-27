@@ -1850,7 +1850,7 @@ export default function AdminAiProvidersPage() {
               </label>
             </div>
 
-            <div className="grid gap-3 rounded-lg border border-[#333] bg-[#202020] p-3 sm:grid-cols-3">
+            <div className="grid gap-3 rounded-lg border border-border bg-muted/30 p-3 sm:grid-cols-3">
               {[
                 ["supportsThinking", "Thinking"],
                 ["supportsVision", "Vision"],
@@ -1859,8 +1859,8 @@ export default function AdminAiProvidersPage() {
                 ["isDefault", t("admin.aiProviders.modelDialog.flags.defaultModel")],
                 ["isActive", t("admin.aiProviders.modelDialog.flags.active")],
               ].map(([key, label]) => (
-                <label key={key} className="flex items-center justify-between gap-3 text-sm">
-                  <span>{label}</span>
+                <label key={key} className="flex items-center justify-between gap-3 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <span className="font-medium">{label}</span>
                   <Switch
                     checked={Boolean(modelForm[key as keyof ModelForm])}
                     onCheckedChange={(checked) =>
