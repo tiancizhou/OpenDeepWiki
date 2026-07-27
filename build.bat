@@ -90,7 +90,7 @@ if "%TARGET%"=="web" goto :build_web
 if "%TARGET%"=="postgres" goto :push_postgres
 
 echo [2] Building backend image (platform: linux/amd64) ...
-docker buildx build --no-cache --platform linux/amd64 -f "src/OpenDeepWiki/Dockerfile" -t "%BACKEND_REMOTE_IMAGE%" --load .
+docker buildx build --platform linux/amd64 -f "src/OpenDeepWiki/Dockerfile" -t "%BACKEND_REMOTE_IMAGE%" --load .
 if errorlevel 1 (
     echo [ERROR] Backend build failed
     goto :end
@@ -107,7 +107,7 @@ if "%TARGET%"=="backend" goto :done
 
 :build_web
 echo [4] Building web image (platform: linux/amd64) ...
-docker buildx build --no-cache --platform linux/amd64 -f "web/Dockerfile" -t "%WEB_REMOTE_IMAGE%" --load "web"
+docker buildx build --platform linux/amd64 -f "web/Dockerfile" -t "%WEB_REMOTE_IMAGE%" --load "web"
 if errorlevel 1 (
     echo [ERROR] Web build failed
     goto :end

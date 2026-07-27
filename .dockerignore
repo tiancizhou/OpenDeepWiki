@@ -21,5 +21,9 @@
 **/obj
 **/secrets.dev.yaml
 **/values.dev.yaml
+# Local runtime data and imported repositories are mounted at runtime and are not build inputs.
+data/
+web/.next/
+docs/.next/
 LICENSE
 README.md
