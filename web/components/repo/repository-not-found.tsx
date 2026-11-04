@@ -75,10 +75,10 @@ export function RepositoryNotFound({ owner, repo, gitHubInfo }: RepositoryNotFou
           <p className="text-sm text-muted-foreground mb-6">
             {t("common.repository.notFound.privateOrNotExist")}
           </p>
-          <Button variant="outline" onClick={() => router.push("/")}>
+          {isAuthenticated && <Button variant="outline" onClick={() => router.push("/")}>
             <Home className="h-4 w-4 mr-2" />
             {t("common.backToHome")}
-          </Button>
+          </Button>}
         </div>
       </div>
     );
@@ -177,7 +177,7 @@ export function RepositoryNotFound({ owner, repo, gitHubInfo }: RepositoryNotFou
           </div>
 
           {/* 返回首页按钮 */}
-          <div className="mt-4 pt-4 border-t">
+          {isAuthenticated && <div className="mt-4 pt-4 border-t">
             <Button
               variant="ghost"
               className="w-full"
@@ -186,7 +186,7 @@ export function RepositoryNotFound({ owner, repo, gitHubInfo }: RepositoryNotFou
               <Home className="h-4 w-4 mr-2" />
               {t("common.backToHome")}
             </Button>
-          </div>
+          </div>}
         </div>
       </div>
     </div>

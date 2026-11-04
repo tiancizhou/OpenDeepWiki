@@ -1,4 +1,4 @@
-﻿services:
+services:
   opendeepwiki:
     image: crpi-j9ha7sxwhatgtvj4.cn-shenzhen.personal.cr.aliyuncs.com/open-deepwiki/opendeepwiki
     build:
@@ -19,12 +19,12 @@
       - Database__Type=${DB_TYPE:-sqlite}
       - ConnectionStrings__Default=${CONNECTION_STRING:-Data Source=/data/opendeepwiki.db}
 
-      # JWT 认证配置 (生产环境请修改)
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?JWT_SECRET_KEY is required, generate one with: openssl rand -base64 48}
+      # JWT 认证配置 (生产环境请通过环境变量覆盖)
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-Enterprise-OpenDeepWiki-Secret-Key-2026-Random-Safe-Token-48Chars}
 
       # 仓库存储目录
       - REPOSITORIES_DIRECTORY=/data
-      - RepositoryAnalyzer__AllowedLocalPathRoots__0=${LOCAL_IMPORT_ROOT:-/host/home/zhangruibo}
+      - RepositoryAnalyzer__AllowedLocalPathRoots__0=${LOCAL_IMPORT_ROOT:-/data/local-imports}
 
       # AI 服务配置 (全局默认，用于 Chat 等功能)
       - CHAT_API_KEY=${CHAT_API_KEY:-your-chat-api-key}
@@ -32,8 +32,6 @@
       - CHAT_REQUEST_TYPE=${CHAT_REQUEST_TYPE:-OpenAI}
 
       # Graphify artifact generation (optional)
-      - SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-      - REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
       - GRAPHIFY_BACKEND=${GRAPHIFY_BACKEND:-}
       - GRAPHIFY_MODEL=${GRAPHIFY_MODEL:-}
       - GRAPHIFY_OUTPUT_ROOT=/data/graphify-artifacts
@@ -60,12 +58,6 @@
       - WIKI_CONTENT_API_KEY=${WIKI_CONTENT_API_KEY:-your-content-api-key}
       - WIKI_CONTENT_REQUEST_TYPE=${WIKI_CONTENT_REQUEST_TYPE:-OpenAI}
 
-      # Wiki 生成器配置 - 翻译 (可选，不配置则使用内容生成配置)
-      # - WIKI_TRANSLATION_MODEL=gpt-4o
-      # - WIKI_TRANSLATION_ENDPOINT=https://api.openai.com/v1
-      # - WIKI_TRANSLATION_API_KEY=your-translation-api-key
-      # - WIKI_TRANSLATION_REQUEST_TYPE=OpenAI
-
       # Wiki 生成并行数 (默认: 5)
       - WIKI_PARALLEL_COUNT=${WIKI_PARALLEL_COUNT:-5}
 
@@ -76,8 +68,6 @@
       - WIKI_LANGUAGES=${WIKI_LANGUAGES:-en,zh,zh-tw,ja,ko,es,fr,de,pt-br,pl,ru,ar}
     volumes:
       - ./data:/data
-      - /home/zhangruibo:/host/home/zhangruibo:ro
-      - /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro
 
   web:
     image: crpi-j9ha7sxwhatgtvj4.cn-shenzhen.personal.cr.aliyuncs.com/open-deepwiki/opendeepwiki-web

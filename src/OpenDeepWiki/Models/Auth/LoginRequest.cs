@@ -3,16 +3,19 @@ using System.ComponentModel.DataAnnotations;
 namespace OpenDeepWiki.Models.Auth;
 
 /// <summary>
-/// 登录请求
+/// 登录请求（支持账号/用户名或邮箱登录）
 /// </summary>
 public class LoginRequest
 {
     /// <summary>
-    /// 邮箱
+    /// 账号（用户名或邮箱）
     /// </summary>
-    [Required(ErrorMessage = "邮箱不能为空")]
-    [EmailAddress(ErrorMessage = "邮箱格式不正确")]
     public string Email { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 账号（兼容字段）
+    /// </summary>
+    public string? Account { get; set; }
 
     /// <summary>
     /// 密码

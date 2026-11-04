@@ -108,12 +108,37 @@ public class AdminRepositoryService : IAdminRepositoryService
                         Failed = group.Count(branch => branch.GenerationStatus == BranchGenerationTaskStatus.Failed)
                     });
 
+            var ownerIds = items
+                .Where(item => !string.IsNullOrWhiteSpace(item.OwnerUserId))
+                .Select(item => item.OwnerUserId!)
+                .Distinct()
+                .ToArray();
+
+            var ownerNames = ownerIds.Length > 0
+                ? await _context.Users
+                    .AsNoTracking()
+                    .Where(u => ownerIds.Contains(u.Id) && !u.IsDeleted)
+                    .ToDictionaryAsync(
+                        u => u.Id,
+                        u => !string.IsNullOrWhiteSpace(u.EmployeeNo) ? $"{u.Name} ({u.EmployeeNo})" : u.Name)
+                : new Dictionary<string, string>();
+
             foreach (var item in items)
             {
                 if (generationSummary.TryGetValue(item.Id, out var summary))
                 {
                     item.BranchGenerationActiveCount = summary.Active;
                     item.BranchGenerationFailedCount = summary.Failed;
+                }
+
+                if (!string.IsNullOrWhiteSpace(item.OwnerUserId) &&
+                    ownerNames.TryGetValue(item.OwnerUserId, out var ownerName))
+                {
+                    item.OwnerUserName = ownerName;
+                }
+                else
+                {
+                    item.OwnerUserName = "admin";
                 }
             }
         }
@@ -166,6 +191,13 @@ public class AdminRepositoryService : IAdminRepositoryService
             BookmarkCount = repo.BookmarkCount,
             ViewCount = repo.ViewCount,
             OwnerUserId = repo.OwnerUserId,
+            OwnerUserName = !string.IsNullOrWhiteSpace(repo.OwnerUserId)
+                ? await _context.Users
+                    .AsNoTracking()
+                    .Where(u => u.Id == repo.OwnerUserId && !u.IsDeleted)
+                    .Select(u => !string.IsNullOrWhiteSpace(u.EmployeeNo) ? $"{u.Name} ({u.EmployeeNo})" : u.Name)
+                    .FirstOrDefaultAsync() ?? "admin"
+                : "admin",
             CreatedAt = repo.CreatedAt,
             UpdatedAt = repo.UpdatedAt
         };

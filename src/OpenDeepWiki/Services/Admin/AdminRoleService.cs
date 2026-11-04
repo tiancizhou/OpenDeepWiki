@@ -25,21 +25,38 @@ public class AdminRoleService : IAdminRoleService
             .ToListAsync();
 
         var roleIds = roles.Select(r => r.Id).ToList();
-        var userCounts = await _context.UserRoles
+        var roleUsers = await _context.UserRoles
             .Where(ur => roleIds.Contains(ur.RoleId) && !ur.IsDeleted)
-            .GroupBy(ur => ur.RoleId)
-            .Select(g => new { RoleId = g.Key, Count = g.Count() })
+            .Join(
+                _context.Users.Where(u => !u.IsDeleted),
+                ur => ur.UserId,
+                u => u.Id,
+                (ur, u) => new
+                {
+                    ur.RoleId,
+                    DisplayName = !string.IsNullOrWhiteSpace(u.EmployeeNo) ? $"{u.Name} ({u.EmployeeNo})" : u.Name
+                })
             .ToListAsync();
 
-        return roles.Select(r => new AdminRoleDto
+        return roles.Select(r =>
         {
-            Id = r.Id,
-            Name = r.Name,
-            Description = r.Description,
-            IsActive = r.IsActive,
-            IsSystemRole = r.IsSystemRole,
-            UserCount = userCounts.FirstOrDefault(c => c.RoleId == r.Id)?.Count ?? 0,
-            CreatedAt = r.CreatedAt
+            var members = roleUsers
+                .Where(ru => ru.RoleId == r.Id)
+                .Select(ru => ru.DisplayName)
+                .Distinct()
+                .ToList();
+            return new AdminRoleDto
+            {
+                Id = r.Id,
+                Name = r.Name,
+                Description = r.Description,
+                IsActive = r.IsActive,
+                IsSystemRole = r.IsSystemRole,
+                UserCount = members.Count,
+                CreatorName = r.IsSystemRole ? "系统内置 (admin)" : "admin",
+                UserNames = members,
+                CreatedAt = r.CreatedAt
+            };
         }).ToList();
     }
 

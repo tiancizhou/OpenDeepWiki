@@ -533,6 +533,13 @@ public static class DbInitializer
         await AddSqliteColumnIfMissingAsync(connection, ctx, "RepositoryProcessingLogs", "GenerationTaskId", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "RepositoryGenerationLocks", "InstanceId", "TEXT");
         await AddSqliteColumnIfMissingAsync(connection, ctx, "RepositoryGenerationLocks", "HeartbeatAt", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "Users", "EmployeeNo", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "Repositories", "AllowedEmployeeNos", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "GroupName", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "RepositoryIds", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "SystemPrompt", "TEXT");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "IsPublic", "INTEGER NOT NULL DEFAULT 1");
+        await AddSqliteColumnIfMissingAsync(connection, ctx, "ChatApps", "AllowedEmployeeNos", "TEXT");
         await ctx.Database.ExecuteSqlRawAsync(
             "CREATE INDEX IF NOT EXISTS IX_RepositoryProcessingLogs_RepositoryId_BranchId_GenerationTaskId_CreatedAt ON RepositoryProcessingLogs (RepositoryId, BranchId, GenerationTaskId, CreatedAt)");
         await ctx.Database.ExecuteSqlRawAsync(
@@ -801,7 +808,15 @@ public static class DbInitializer
             ALTER TABLE ""RepositoryProcessingLogs"" ADD COLUMN IF NOT EXISTS ""BranchId"" TEXT;
             ALTER TABLE ""RepositoryProcessingLogs"" ADD COLUMN IF NOT EXISTS ""GenerationTaskId"" TEXT;
             ALTER TABLE ""RepositoryGenerationLocks"" ADD COLUMN IF NOT EXISTS ""InstanceId"" TEXT;
-            ALTER TABLE ""RepositoryGenerationLocks"" ADD COLUMN IF NOT EXISTS ""HeartbeatAt"" TIMESTAMP WITH TIME ZONE;");
+            ALTER TABLE ""RepositoryGenerationLocks"" ADD COLUMN IF NOT EXISTS ""HeartbeatAt"" TIMESTAMP WITH TIME ZONE;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""EmployeeNo"" TEXT;
+            ALTER TABLE ""Repositories"" ADD COLUMN IF NOT EXISTS ""AllowedEmployeeNos"" TEXT;
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""GroupName"" TEXT;
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""RepositoryIds"" TEXT;
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""SystemPrompt"" TEXT;
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""IsPublic"" BOOLEAN NOT NULL DEFAULT TRUE;
+            ALTER TABLE ""ChatApps"" ADD COLUMN IF NOT EXISTS ""AllowedEmployeeNos"" TEXT;
+            ALTER TABLE ""ChatLogs"" ALTER COLUMN ""AnswerSummary"" TYPE TEXT;");
         await ctx.Database.ExecuteSqlRawAsync(@"
             CREATE INDEX IF NOT EXISTS ""IX_RepositoryProcessingLogs_RepositoryId_BranchId_GenerationTaskId_CreatedAt"" ON ""RepositoryProcessingLogs"" (""RepositoryId"", ""BranchId"", ""GenerationTaskId"", ""CreatedAt"")");
         await ctx.Database.ExecuteSqlRawAsync(@"

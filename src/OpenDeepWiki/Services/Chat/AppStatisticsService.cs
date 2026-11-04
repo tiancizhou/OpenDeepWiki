@@ -87,11 +87,11 @@ public class AppStatisticsService : IAppStatisticsService
     /// <inheritdoc />
     public async Task RecordRequestAsync(RecordRequestDto dto, CancellationToken cancellationToken = default)
     {
-        var today = DateTime.UtcNow.Date;
+        var today = DateTime.SpecifyKind(DateTime.UtcNow.Date, DateTimeKind.Utc);
 
         // Try to find existing statistics for today
         var stats = await _context.AppStatistics
-            .FirstOrDefaultAsync(s => s.AppId == dto.AppId && s.Date == today, cancellationToken);
+            .FirstOrDefaultAsync(s => s.AppId == dto.AppId && s.Date == today && !s.IsDeleted, cancellationToken);
 
         if (stats == null)
         {
@@ -131,13 +131,15 @@ public class AppStatisticsService : IAppStatisticsService
         DateTime endDate,
         CancellationToken cancellationToken = default)
     {
-        var dailyStats = await GetDailyStatisticsAsync(appId, startDate, endDate, cancellationToken);
+        var startUtc = NormalizeUtcDate(startDate);
+        var endUtc = NormalizeUtcDate(endDate);
+        var dailyStats = await GetDailyStatisticsAsync(appId, startUtc, endUtc, cancellationToken);
 
         return new AggregatedStatisticsDto
         {
             AppId = appId,
-            StartDate = startDate,
-            EndDate = endDate,
+            StartDate = startUtc,
+            EndDate = endUtc,
             TotalRequests = dailyStats.Sum(s => s.RequestCount),
             TotalInputTokens = dailyStats.Sum(s => s.InputTokens),
             TotalOutputTokens = dailyStats.Sum(s => s.OutputTokens),
@@ -152,19 +154,63 @@ public class AppStatisticsService : IAppStatisticsService
         DateTime endDate,
         CancellationToken cancellationToken = default)
     {
-        var stats = await _context.AppStatistics
-            .Where(s => s.AppId == appId && s.Date >= startDate.Date && s.Date <= endDate.Date)
-            .OrderBy(s => s.Date)
-            .Select(s => new AppStatisticsDto
-            {
-                AppId = s.AppId,
-                Date = s.Date,
-                RequestCount = s.RequestCount,
-                InputTokens = s.InputTokens,
-                OutputTokens = s.OutputTokens
-            })
+        var startUtc = NormalizeUtcDate(startDate);
+        var endExclusiveUtc = NormalizeUtcDate(endDate).AddDays(1);
+
+        var rawStats = await _context.AppStatistics
+            .AsNoTracking()
+            .Where(s => s.AppId == appId && !s.IsDeleted && s.Date >= startUtc && s.Date < endExclusiveUtc)
             .ToListAsync(cancellationToken);
 
+        if (rawStats.Count == 0)
+        {
+            // Fallback to aggregating from ChatLogs if AppStatistics has no rows yet
+            var logs = await _context.ChatLogs
+                .AsNoTracking()
+                .Where(l => l.AppId == appId && !l.IsDeleted && l.CreatedAt >= startUtc && l.CreatedAt < endExclusiveUtc)
+                .ToListAsync(cancellationToken);
+
+            if (logs.Count > 0)
+            {
+                return logs
+                    .GroupBy(l => l.CreatedAt.Date)
+                    .OrderBy(g => g.Key)
+                    .Select(g => new AppStatisticsDto
+                    {
+                        AppId = appId,
+                        Date = DateTime.SpecifyKind(g.Key, DateTimeKind.Utc),
+                        RequestCount = g.Count(),
+                        InputTokens = g.Sum(x => (long)x.InputTokens),
+                        OutputTokens = g.Sum(x => (long)x.OutputTokens)
+                    })
+                    .ToList();
+            }
+        }
+
+        var stats = rawStats
+            .GroupBy(s => s.Date.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => new AppStatisticsDto
+            {
+                AppId = appId,
+                Date = DateTime.SpecifyKind(g.Key, DateTimeKind.Utc),
+                RequestCount = g.Sum(x => x.RequestCount),
+                InputTokens = g.Sum(x => x.InputTokens),
+                OutputTokens = g.Sum(x => x.OutputTokens)
+            })
+            .ToList();
+
         return stats;
+    }
+
+    private static DateTime NormalizeUtcDate(DateTime dt)
+    {
+        var utc = dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+        };
+        return DateTime.SpecifyKind(utc.Date, DateTimeKind.Utc);
     }
 }

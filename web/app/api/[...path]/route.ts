@@ -123,12 +123,21 @@ async function proxyRequest(request: NextRequest) {
       }
     });
 
-    // 转发请求
+    const originalHost = request.headers.get('host');
+    if (originalHost && !headers.has('x-forwarded-host')) {
+      headers.set('x-forwarded-host', originalHost);
+    }
+    if (!headers.has('x-forwarded-proto')) {
+      headers.set('x-forwarded-proto', request.nextUrl.protocol.replace(':', '') || 'http');
+    }
+
+    // 转发请求（使用 manual 保持 302 跳转透传给浏览器，支持飞书 OAuth 授权跳转）
     log(`[${formatTimestamp()}] [${requestId}] 🚀 开始转发请求...`);
     const response = await fetch(targetUrl, {
       method: request.method,
       headers,
-      body: request.body,
+      body: request.method !== 'GET' && request.method !== 'HEAD' ? request.body : undefined,
+      redirect: 'manual',
       // @ts-expect-error duplex is required for streaming body
       duplex: 'half',
     });
@@ -138,11 +147,17 @@ async function proxyRequest(request: NextRequest) {
     // 构建响应 headers
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
-      // 跳过一些不应该转发的 header
-      if (!['content-encoding', 'transfer-encoding'].includes(key.toLowerCase())) {
+      const lowerKey = key.toLowerCase();
+      // 跳过一些不应该转发的 header，set-cookie 单独处理以支持多 cookie
+      if (!['content-encoding', 'transfer-encoding', 'set-cookie'].includes(lowerKey)) {
         responseHeaders.set(key, value);
       }
     });
+
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+    for (const cookie of setCookies) {
+      responseHeaders.append('Set-Cookie', cookie);
+    }
 
     // 添加代理信息到响应头
     responseHeaders.set('X-Proxy-Request-Id', requestId);

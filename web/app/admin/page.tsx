@@ -16,11 +16,15 @@ import {
 import {
   Activity,
   BarChart3,
+  Bot,
   Coins,
   Database,
+  FolderGit2,
   GitBranch,
   Globe2,
+  Layers,
   Percent,
+  RefreshCw,
   Server,
   Sparkles,
   TrendingUp,
@@ -30,6 +34,7 @@ import {
 import { useLocale } from "next-intl";
 
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -414,6 +419,19 @@ export default function AdminDashboardPage() {
   const totalTokens = tokenStats?.totalTokens ?? 0;
   const totalCost = tokenStats?.totalCost ?? 0;
 
+  const categoryBreakdown = tokenStats?.categoryBreakdown;
+  const repoBreakdowns = tokenStats?.repositoryBreakdowns ?? [];
+  const agentAppBreakdowns = tokenStats?.agentAppBreakdowns ?? [];
+
+  const repoInitTotal = categoryBreakdown?.repoInitTotalTokens ?? 0;
+  const repoSyncTotal = categoryBreakdown?.repoSyncTotalTokens ?? 0;
+  const agentAppTotal = categoryBreakdown?.agentAppTotalTokens ?? 0;
+  const categorySum = Math.max(repoInitTotal + repoSyncTotal + agentAppTotal, totalTokens, 1);
+
+  const repoInitPct = (repoInitTotal / categorySum) * 100;
+  const repoSyncPct = (repoSyncTotal / categorySum) * 100;
+  const agentAppPct = (agentAppTotal / categorySum) * 100;
+
   const totalMcpRequests = mcpStats?.totalRequests ?? 0;
   const totalMcpSuccessful = mcpStats?.totalSuccessful ?? 0;
   const totalMcpErrors = mcpStats?.totalErrors ?? 0;
@@ -737,6 +755,279 @@ export default function AdminDashboardPage() {
               </p>
             </div>
           </aside>
+        </div>
+      </Card>
+
+      {/* ==================== Token 消耗业务组成与仓库/智能体明细 ==================== */}
+      <Card className="gap-0 rounded-lg p-5 shadow-none space-y-5">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold flex items-center gap-2">
+              <Layers className="h-4 w-4 text-emerald-500" />
+              Token 消耗业务组成明细（仓库初始化 / 增量同步 / 智能体应用）
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              拆解最近 {days} 天内各代码仓库「初始化构建」、「增量同步更新」以及「智能体应用对外问答」的 Token 消耗构成。
+            </p>
+          </div>
+          <Badge variant="outline" className="text-xs font-normal self-start sm:self-center">
+            窗口累计消耗：{formatNumberWithUnits(totalTokens)} Tokens（{totalTokens.toLocaleString()}）
+          </Badge>
+        </div>
+
+        {/* 1. 三大业务场景汇总卡片 */}
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* 场景一：仓库初始化构建 */}
+          <div className="rounded-lg border bg-muted/15 p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <FolderGit2 className="h-4 w-4 text-blue-500" />
+                仓库初始化花费 Token
+              </div>
+              <Badge variant="secondary" className="text-xs tabular-nums">
+                占比 {formatPercent(repoInitPct)}
+              </Badge>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold tabular-nums">
+                {formatNumberWithUnits(repoInitTotal)}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                共 {categoryBreakdown?.repoInitCallCount ?? 0} 次生成调用
+              </span>
+            </div>
+            <Progress value={repoInitPct} className="h-1.5" />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+              <span>
+                输入 {formatNumberWithUnits(categoryBreakdown?.repoInitInputTokens ?? 0)} / 输出{" "}
+                {formatNumberWithUnits(categoryBreakdown?.repoInitOutputTokens ?? 0)}
+              </span>
+              <span>
+                命中缓存 {formatNumberWithUnits(categoryBreakdown?.repoInitCachedInputTokens ?? 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* 场景二：仓库增量同步 */}
+          <div className="rounded-lg border bg-muted/15 p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <RefreshCw className="h-4 w-4 text-emerald-500" />
+                仓库增量同步花费 Token
+              </div>
+              <Badge variant="secondary" className="text-xs tabular-nums">
+                占比 {formatPercent(repoSyncPct)}
+              </Badge>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold tabular-nums">
+                {formatNumberWithUnits(repoSyncTotal)}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                共 {categoryBreakdown?.repoSyncCallCount ?? 0} 次同步调用
+              </span>
+            </div>
+            <Progress value={repoSyncPct} className="h-1.5" />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+              <span>
+                输入 {formatNumberWithUnits(categoryBreakdown?.repoSyncInputTokens ?? 0)} / 输出{" "}
+                {formatNumberWithUnits(categoryBreakdown?.repoSyncOutputTokens ?? 0)}
+              </span>
+              <span>
+                命中缓存 {formatNumberWithUnits(categoryBreakdown?.repoSyncCachedInputTokens ?? 0)}
+              </span>
+            </div>
+          </div>
+
+          {/* 场景三：智能体应用问答 */}
+          <div className="rounded-lg border bg-muted/15 p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Bot className="h-4 w-4 text-violet-500" />
+                智能体应用花费 Token
+              </div>
+              <Badge variant="secondary" className="text-xs tabular-nums">
+                占比 {formatPercent(agentAppPct)}
+              </Badge>
+            </div>
+            <div className="flex items-baseline justify-between">
+              <span className="text-2xl font-bold tabular-nums">
+                {formatNumberWithUnits(agentAppTotal)}
+              </span>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                共 {categoryBreakdown?.agentAppRequestCount ?? 0} 次问答请求
+              </span>
+            </div>
+            <Progress value={agentAppPct} className="h-1.5" />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-0.5">
+              <span>
+                输入 {formatNumberWithUnits(categoryBreakdown?.agentAppInputTokens ?? 0)} / 输出{" "}
+                {formatNumberWithUnits(categoryBreakdown?.agentAppOutputTokens ?? 0)}
+              </span>
+              <span>含 ZtWork 连接器、MCP 与在线问答</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. 具体仓库明细表 & 智能体应用明细表 */}
+        <div className="grid gap-5 xl:grid-cols-12">
+          {/* 左栏：各代码仓库初始化 & 增量同步 Token 消耗明细 */}
+          <div className="xl:col-span-7 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <FolderGit2 className="h-4 w-4 text-blue-500" />
+                各代码仓库 Token 消耗明细（初始化构建 vs 增量同步）
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                共 {repoBreakdowns.length} 个代码仓库
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/40 text-muted-foreground">
+                    <th className="text-left py-2.5 px-3 font-medium">代码仓库 (所属仓库组/系统)</th>
+                    <th className="text-right py-2.5 px-3 font-medium">初始化花费 Token</th>
+                    <th className="text-right py-2.5 px-3 font-medium">增量同步花费 Token</th>
+                    <th className="text-right py-2.5 px-3 font-medium">缓存命中</th>
+                    <th className="text-right py-2.5 px-3 font-medium">合计消耗 &amp; 占比</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {repoBreakdowns.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        暂无仓库 Token 消耗记录
+                      </td>
+                    </tr>
+                  ) : (
+                    repoBreakdowns.map((repo) => {
+                      const pct = categorySum > 0 ? (repo.totalTokens / categorySum) * 100 : 0;
+                      return (
+                        <tr
+                          key={repo.repositoryId}
+                          className="border-b last:border-0 hover:bg-muted/25 transition-colors"
+                        >
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-foreground">
+                              {repo.orgName} / {repo.repoName}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5">
+                              初始化 {repo.initCallCount} 次 · 同步 {repo.syncCallCount} 次
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">
+                            <div className="font-semibold text-blue-600 dark:text-blue-400">
+                              {formatNumberWithUnits(repo.initTotalTokens)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              入 {formatNumberWithUnits(repo.initInputTokens)} / 出{" "}
+                              {formatNumberWithUnits(repo.initOutputTokens)}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums">
+                            <div className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {formatNumberWithUnits(repo.syncTotalTokens)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              入 {formatNumberWithUnits(repo.syncInputTokens)} / 出{" "}
+                              {formatNumberWithUnits(repo.syncOutputTokens)}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">
+                            {formatNumberWithUnits(repo.cachedInputTokens)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums min-w-[130px]">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className="font-bold text-foreground">
+                                {formatNumberWithUnits(repo.totalTokens)}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground w-11 text-right">
+                                ({formatPercent(pct)})
+                              </span>
+                            </div>
+                            <Progress value={pct} className="h-1 mt-1" />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* 右栏：各智能体应用 Token 消耗明细 */}
+          <div className="xl:col-span-5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold flex items-center gap-1.5">
+                <Bot className="h-4 w-4 text-violet-500" />
+                各智能体应用 Token 消耗明细
+              </h3>
+              <span className="text-xs text-muted-foreground">
+                共 {agentAppBreakdowns.length} 个智能体应用
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/40 text-muted-foreground">
+                    <th className="text-left py-2.5 px-3 font-medium">智能体应用</th>
+                    <th className="text-right py-2.5 px-3 font-medium">问答次数</th>
+                    <th className="text-right py-2.5 px-3 font-medium">输入 / 输出 Token</th>
+                    <th className="text-right py-2.5 px-3 font-medium">合计消耗</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentAppBreakdowns.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-muted-foreground">
+                        暂无智能体应用消耗记录
+                      </td>
+                    </tr>
+                  ) : (
+                    agentAppBreakdowns.map((app) => {
+                      const appPct =
+                        agentAppTotal > 0 ? (app.totalTokens / agentAppTotal) * 100 : 0;
+                      return (
+                        <tr
+                          key={app.id}
+                          className="border-b last:border-0 hover:bg-muted/25 transition-colors"
+                        >
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-foreground flex items-center gap-1.5">
+                              <span>{app.name}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                                {app.boundRepoCount} 仓库
+                              </Badge>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                              {app.appId}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-medium">
+                            {app.requestCount.toLocaleString()} 次
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums text-muted-foreground">
+                            入 {formatNumberWithUnits(app.inputTokens)} / 出{" "}
+                            {formatNumberWithUnits(app.outputTokens)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums min-w-[110px]">
+                            <div className="font-bold text-violet-600 dark:text-violet-400">
+                              {formatNumberWithUnits(app.totalTokens)}
+                            </div>
+                            <Progress value={appPct} className="h-1 mt-1" />
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </Card>
 

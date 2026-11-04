@@ -174,12 +174,12 @@ export default function AdminRolesPage() {
                 <div className="flex min-w-0 items-center gap-3">
                   <div
                     className={`rounded-md p-2 ${
-                      role.isSystem
+                      (role.isSystem || role.isSystemRole)
                         ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
                         : "bg-primary/10 text-primary"
                     }`}
                   >
-                    {role.isSystem ? (
+                    {(role.isSystem || role.isSystemRole) ? (
                       <ShieldCheck className="h-4 w-4" />
                     ) : (
                       <Shield className="h-4 w-4" />
@@ -187,7 +187,7 @@ export default function AdminRolesPage() {
                   </div>
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold">{role.name}</h3>
-                    {role.isSystem && (
+                    {(role.isSystem || role.isSystemRole) && (
                       <Badge
                         variant="secondary"
                         className="mt-0.5 text-[10px] font-normal"
@@ -197,7 +197,7 @@ export default function AdminRolesPage() {
                     )}
                   </div>
                 </div>
-                {!role.isSystem && (
+                {!(role.isSystem || role.isSystemRole) && (
                   <div className="flex shrink-0 gap-1">
                     <Button
                       variant="ghost"
@@ -221,6 +221,22 @@ export default function AdminRolesPage() {
               <p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">
                 {role.description || "—"}
               </p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="text-muted-foreground/80">创建人：</span>
+                <Badge variant="outline" className="px-1.5 py-0 text-[11px] font-normal">
+                  {role.creatorName || (role.isSystem || role.isSystemRole ? "系统内置 (admin)" : "admin")}
+                </Badge>
+              </div>
+              {role.userNames && role.userNames.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                  <span className="text-muted-foreground/80">包含成员：</span>
+                  {role.userNames.map((uName) => (
+                    <Badge key={uName} variant="secondary" className="px-1.5 py-0 text-[11px] font-normal">
+                      {uName}
+                    </Badge>
+                  ))}
+                </div>
+              )}
               <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5" />
@@ -254,7 +270,7 @@ export default function AdminRolesPage() {
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder={t("admin.roles.enterRoleName")}
-                disabled={editingRole?.isSystem}
+                disabled={(editingRole?.isSystem || editingRole?.isSystemRole)}
               />
             </div>
             <div className="space-y-1.5">

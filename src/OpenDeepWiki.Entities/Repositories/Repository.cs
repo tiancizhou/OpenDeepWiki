@@ -172,6 +172,12 @@ public class Repository : AggregateRoot<string>
     public string? Description { get; set; }
 
     /// <summary>
+    /// 允许访问的员工工号白名单（逗号分隔，用于私有仓库/项目的精细化授权）
+    /// </summary>
+    [StringLength(2000)]
+    public string? AllowedEmployeeNos { get; set; }
+
+    /// <summary>
     /// Whether this repository is owned by a department (org import) rather than an individual user.
     /// When true, the repo appears in Organization view only, not in the importing user's "My Repos".
     /// </summary>

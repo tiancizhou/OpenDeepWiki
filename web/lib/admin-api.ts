@@ -63,6 +63,52 @@ export interface DailyTokenUsage {
   totalCost: number;
 }
 
+export interface TokenCategoryBreakdown {
+  repoInitInputTokens: number;
+  repoInitOutputTokens: number;
+  repoInitCachedInputTokens: number;
+  repoInitTotalTokens: number;
+  repoInitCallCount: number;
+  repoSyncInputTokens: number;
+  repoSyncOutputTokens: number;
+  repoSyncCachedInputTokens: number;
+  repoSyncTotalTokens: number;
+  repoSyncCallCount: number;
+  agentAppInputTokens: number;
+  agentAppOutputTokens: number;
+  agentAppTotalTokens: number;
+  agentAppRequestCount: number;
+}
+
+export interface RepositoryTokenBreakdown {
+  repositoryId: string;
+  orgName: string;
+  repoName: string;
+  statusName: string;
+  initInputTokens: number;
+  initOutputTokens: number;
+  initTotalTokens: number;
+  initCallCount: number;
+  syncInputTokens: number;
+  syncOutputTokens: number;
+  syncTotalTokens: number;
+  syncCallCount: number;
+  cachedInputTokens: number;
+  totalTokens: number;
+}
+
+export interface AgentAppTokenBreakdown {
+  id: string;
+  appId: string;
+  name: string;
+  groupName: string;
+  boundRepoCount: number;
+  requestCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
+
 export interface TokenUsageStatistics {
   dailyUsages: DailyTokenUsage[];
   totalInputTokens: number;
@@ -74,6 +120,9 @@ export interface TokenUsageStatistics {
   totalInputCost: number;
   totalOutputCost: number;
   totalCost: number;
+  categoryBreakdown?: TokenCategoryBreakdown;
+  repositoryBreakdowns?: RepositoryTokenBreakdown[];
+  agentAppBreakdowns?: AgentAppTokenBreakdown[];
 }
 
 export interface McpDailyUsage {
@@ -775,7 +824,10 @@ export interface AdminRole {
   name: string;
   description?: string;
   isSystem: boolean;
+  isSystemRole?: boolean;
   userCount: number;
+  creatorName?: string;
+  userNames?: string[];
   createdAt: string;
 }
 

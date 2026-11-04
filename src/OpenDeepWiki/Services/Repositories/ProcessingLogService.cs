@@ -140,8 +140,8 @@ public class ProcessingLogService : IProcessingLogService
         // 反转列表，使其按时间正序排列（最早的在前）
         logs.Reverse();
 
-        // 获取当前步骤（最新日志的步骤）
-        var currentStep = logs.LastOrDefault()?.Step ?? ProcessingStep.Workspace;
+        // 获取当前步骤（防止后续辅助步骤写回 Workspace 导致进度条回退到 0%）
+        var currentStep = logs.Count > 0 ? logs.Max(l => l.Step) : ProcessingStep.Workspace;
 
         // 解析文档生成进度
         var (totalDocuments, completedDocuments) = ParseDocumentProgress(logs);
@@ -175,10 +175,20 @@ public class ProcessingLogService : IProcessingLogService
             var documentProgressMatch = DocumentProgressRegex.Match(log.Message);
             if (documentProgressMatch.Success)
             {
-                completed = Math.Max(completed, int.Parse(documentProgressMatch.Groups[1].Value));
-                if (total == 0)
+                var currentCompleted = int.Parse(documentProgressMatch.Groups[1].Value);
+                var currentTotal = int.Parse(documentProgressMatch.Groups[2].Value);
+                if (currentTotal > 0 && currentTotal != total)
                 {
-                    total = int.Parse(documentProgressMatch.Groups[2].Value);
+                    total = currentTotal;
+                    completed = currentCompleted;
+                }
+                else
+                {
+                    completed = Math.Max(completed, currentCompleted);
+                    if (total == 0)
+                    {
+                        total = currentTotal;
+                    }
                 }
                 continue;
             }
@@ -186,7 +196,12 @@ public class ProcessingLogService : IProcessingLogService
             var documentsToGenerateMatch = DocumentsToGenerateRegex.Match(log.Message);
             if (documentsToGenerateMatch.Success)
             {
-                total = int.Parse(documentsToGenerateMatch.Groups[1].Value);
+                var nextTotal = int.Parse(documentsToGenerateMatch.Groups[1].Value);
+                if (nextTotal != total)
+                {
+                    completed = 0;
+                }
+                total = nextTotal;
                 continue;
             }
 

@@ -10,7 +10,10 @@ public class AdminRoleDto
     public string? Description { get; set; }
     public bool IsActive { get; set; }
     public bool IsSystemRole { get; set; }
+    public bool IsSystem => IsSystemRole;
     public int UserCount { get; set; }
+    public string CreatorName { get; set; } = "admin";
+    public List<string> UserNames { get; set; } = new();
     public DateTime CreatedAt { get; set; }
 }
 

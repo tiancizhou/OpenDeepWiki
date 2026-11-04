@@ -17,7 +17,7 @@ import { LanguageToggle } from "@/components/language-toggle";
 import { HeaderSearchBox } from "@/components/header-search-box";
 import { useTranslations } from "@/hooks/use-translations";
 import { useAuth } from "@/contexts/auth-context";
-import { Loader2, Settings, User } from "lucide-react";
+import { KeyRound, Loader2, Settings, Shield, Terminal, User } from "lucide-react";
 
 interface HeaderSearchBoxProps {
   value: string;
@@ -53,19 +53,19 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-border/70 bg-background/85 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 items-center gap-2.5">
         <SidebarTrigger className="-ml-1 rounded-lg" />
         <Separator orientation="vertical" className="mr-1 hidden h-4 sm:block" />
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <h2 className="truncate text-sm font-semibold tracking-tight">{title}</h2>
+          <span className="hidden items-center gap-1 rounded-full border border-teal-500/25 bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium text-teal-700 md:inline-flex dark:text-teal-300">
+            <span className="size-1.5 rounded-full bg-teal-500" />
+            知识库引擎在线
+          </span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className="hidden text-xs text-muted-foreground md:inline-block">
-          {currentWeekday}
-        </span>
-
+      <div className="flex items-center gap-2.5">
         {searchBox && (
           <HeaderSearchBox
             value={searchBox.value}
@@ -73,6 +73,20 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
             visible={searchBox.visible}
           />
         )}
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden h-8 gap-1.5 rounded-lg border-border/80 bg-background/70 text-xs font-medium sm:inline-flex"
+          onClick={() => router.push("/mcp")}
+        >
+          <Terminal className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+          <span>Open API / Agent</span>
+        </Button>
+
+        <span className="hidden text-xs text-muted-foreground lg:inline-block">
+          {currentWeekday}
+        </span>
 
         <div className="flex items-center gap-1">
           <LanguageToggle />
@@ -87,9 +101,11 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-9 w-9 rounded-full">
-                <Avatar className="h-9 w-9">
+                <Avatar className="h-9 w-9 ring-1 ring-border">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                  <AvatarFallback className="bg-teal-500/15 font-semibold text-teal-700 dark:text-teal-300">
+                    {user.name.charAt(0).toUpperCase()}
+                  </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
@@ -109,6 +125,10 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
                 <User className="mr-2 h-4 w-4" />
                 {t("common.profile.title")}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/mcp")}>
+                <KeyRound className="mr-2 h-4 w-4" />
+                API Key 与开放平台
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
                 {t("common.settings.title")}
@@ -117,7 +137,7 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleAdminPanel}>
-                    <Settings className="mr-2 h-4 w-4" />
+                    <Shield className="mr-2 h-4 w-4 text-teal-600 dark:text-teal-400" />
                     {t("common.adminPanel") || "Admin Panel"}
                   </DropdownMenuItem>
                 </>
@@ -129,7 +149,7 @@ export function Header({ title, currentWeekday, searchBox }: HeaderProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Button size="sm" onClick={handleLogin}>
+          <Button size="sm" className="h-8 rounded-lg bg-teal-600 px-3 text-white hover:bg-teal-500" onClick={handleLogin}>
             {t("common.login")}
           </Button>
         )}

@@ -8,6 +8,19 @@ using OpenDeepWiki.Services.AI;
 namespace OpenDeepWiki.Services.Chat;
 
 /// <summary>
+/// 智能体应用绑定的仓库简要信息
+/// </summary>
+public class ChatAppBoundRepoDto
+{
+    public string Id { get; set; } = string.Empty;
+    public string OrgName { get; set; } = string.Empty;
+    public string RepoName { get; set; } = string.Empty;
+    public string? Description { get; set; }
+    public string StatusName { get; set; } = string.Empty;
+    public bool IsPublic { get; set; }
+}
+
+/// <summary>
 /// DTO for creating a chat app.
 /// </summary>
 public class CreateChatAppDto
@@ -24,6 +37,11 @@ public class CreateChatAppDto
     public List<string>? AvailableModels { get; set; }
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
+    public string? GroupName { get; set; }
+    public List<string>? RepositoryIds { get; set; }
+    public string? SystemPrompt { get; set; }
+    public bool IsPublic { get; set; } = true;
+    public string? AllowedEmployeeNos { get; set; }
 }
 
 /// <summary>
@@ -44,8 +62,12 @@ public class UpdateChatAppDto
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
     public bool? IsActive { get; set; }
+    public string? GroupName { get; set; }
+    public List<string>? RepositoryIds { get; set; }
+    public string? SystemPrompt { get; set; }
+    public bool? IsPublic { get; set; }
+    public string? AllowedEmployeeNos { get; set; }
 }
-
 
 /// <summary>
 /// DTO for chat app response.
@@ -69,6 +91,12 @@ public class ChatAppDto
     public string? DefaultModel { get; set; }
     public int? RateLimitPerMinute { get; set; }
     public bool IsActive { get; set; }
+    public string? GroupName { get; set; }
+    public List<string> RepositoryIds { get; set; } = new();
+    public List<ChatAppBoundRepoDto> BoundRepositories { get; set; } = new();
+    public string? SystemPrompt { get; set; }
+    public bool IsPublic { get; set; } = true;
+    public string? AllowedEmployeeNos { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -78,52 +106,16 @@ public class ChatAppDto
 /// </summary>
 public interface IChatAppService
 {
-    /// <summary>
-    /// Creates a new chat app for the user.
-    /// </summary>
     Task<ChatAppDto> CreateAppAsync(string userId, CreateChatAppDto dto, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets all apps for a user.
-    /// </summary>
     Task<List<ChatAppDto>> GetUserAppsAsync(string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets an app by its database ID.
-    /// </summary>
     Task<ChatAppDto?> GetAppByIdAsync(Guid id, string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Gets an app by its public AppId.
-    /// </summary>
     Task<ChatAppDto?> GetAppByAppIdAsync(string appId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Updates an existing app.
-    /// </summary>
     Task<ChatAppDto?> UpdateAppAsync(Guid id, string userId, UpdateChatAppDto dto, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Deletes an app.
-    /// </summary>
     Task<bool> DeleteAppAsync(Guid id, string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Regenerates the app secret.
-    /// </summary>
     Task<string?> RegenerateSecretAsync(Guid id, string userId, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Generates a unique AppId.
-    /// </summary>
     string GenerateAppId();
-
-    /// <summary>
-    /// Generates a secure AppSecret.
-    /// </summary>
     string GenerateAppSecret();
 }
-
 
 /// <summary>
 /// Chat app service implementation.
@@ -142,64 +134,108 @@ public class ChatAppService : IChatAppService
     /// <inheritdoc />
     public async Task<ChatAppDto> CreateAppAsync(string userId, CreateChatAppDto dto, CancellationToken cancellationToken = default)
     {
-        var aiProviderId = dto.AiProviderId ?? await CreateProviderFromLegacyAppConfigAsync(
-            dto.Name,
-            dto.ProviderType,
-            dto.BaseUrl,
-            dto.ApiKey,
-            dto.DefaultModel ?? dto.AvailableModels?.FirstOrDefault(),
-            cancellationToken);
+        var aiProviderId = dto.AiProviderId;
+        var defaultModel = dto.DefaultModel;
+        var providerType = string.IsNullOrWhiteSpace(dto.ProviderType) ? "OpenAI" : dto.ProviderType;
+
+        if (string.IsNullOrWhiteSpace(aiProviderId))
+        {
+            aiProviderId = await CreateProviderFromLegacyAppConfigAsync(
+                dto.Name,
+                dto.ProviderType,
+                dto.BaseUrl,
+                dto.ApiKey,
+                dto.DefaultModel ?? dto.AvailableModels?.FirstOrDefault(),
+                cancellationToken);
+        }
+
+        if (string.IsNullOrWhiteSpace(aiProviderId))
+        {
+            var defaultProvider = await _context.AiProviderConfigs
+                .AsNoTracking()
+                .Where(p => p.IsActive && !p.IsDeleted)
+                .OrderBy(p => p.SortOrder)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (defaultProvider != null)
+            {
+                aiProviderId = defaultProvider.Id;
+                providerType = defaultProvider.ProviderType;
+                if (string.IsNullOrWhiteSpace(defaultModel))
+                {
+                    defaultModel = defaultProvider.DefaultModelId;
+                }
+            }
+        }
+
+        var normalizedRepoIds = (dto.RepositoryIds ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         var app = new ChatApp
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Name = dto.Name,
-            Description = dto.Description,
-            IconUrl = dto.IconUrl,
+            Name = dto.Name.Trim(),
+            Description = dto.Description?.Trim(),
+            IconUrl = dto.IconUrl?.Trim(),
             AppId = GenerateAppId(),
             AppSecret = GenerateAppSecret(),
             EnableDomainValidation = dto.EnableDomainValidation,
             AllowedDomains = dto.AllowedDomains != null ? JsonSerializer.Serialize(dto.AllowedDomains) : null,
             AiProviderId = aiProviderId,
-            ProviderType = dto.ProviderType,
+            ProviderType = providerType,
             ApiKey = dto.ApiKey,
             BaseUrl = dto.BaseUrl,
             AvailableModels = dto.AvailableModels != null ? JsonSerializer.Serialize(dto.AvailableModels) : null,
-            DefaultModel = dto.DefaultModel,
+            DefaultModel = defaultModel,
             RateLimitPerMinute = dto.RateLimitPerMinute,
             IsActive = true,
+            GroupName = string.IsNullOrWhiteSpace(dto.GroupName) ? "业务系统智能体" : dto.GroupName.Trim(),
+            RepositoryIds = JsonSerializer.Serialize(normalizedRepoIds),
+            SystemPrompt = dto.SystemPrompt?.Trim(),
+            IsPublic = dto.IsPublic,
+            AllowedEmployeeNos = NormalizeEmployeeNos(dto.AllowedEmployeeNos),
             CreatedAt = DateTime.UtcNow
         };
 
         _context.ChatApps.Add(app);
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Created chat app {AppId} for user {UserId}", app.AppId, userId);
+        _logger.LogInformation("Created chat app {AppId} ({Name}) with {RepoCount} bound repos for user {UserId}",
+            app.AppId, app.Name, normalizedRepoIds.Count, userId);
 
-        return MapToDto(app, includeSecret: true);
+        var repoMap = await LoadRepositoryMapAsync(cancellationToken);
+        return MapToDto(app, includeSecret: true, repoMap);
     }
 
     /// <inheritdoc />
     public async Task<List<ChatAppDto>> GetUserAppsAsync(string userId, CancellationToken cancellationToken = default)
     {
+        await EnsureDefaultBusinessSystemAppsAsync(userId, cancellationToken);
+
+        // 企业内部知识中枢：所有登录研发/管理员均可查看已创建的智能体应用列表
         var apps = await _context.ChatApps
-            .Where(a => a.UserId == userId && !a.IsDeleted)
+            .Where(a => !a.IsDeleted)
             .OrderByDescending(a => a.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return apps.Select(a => MapToDto(a, includeSecret: false)).ToList();
+        var repoMap = await LoadRepositoryMapAsync(cancellationToken);
+        return apps.Select(a => MapToDto(a, includeSecret: false, repoMap)).ToList();
     }
 
     /// <inheritdoc />
     public async Task<ChatAppDto?> GetAppByIdAsync(Guid id, string userId, CancellationToken cancellationToken = default)
     {
         var app = await _context.ChatApps
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && !a.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted, cancellationToken);
 
-        return app != null ? MapToDto(app, includeSecret: true) : null;
+        if (app == null) return null;
+        var repoMap = await LoadRepositoryMapAsync(cancellationToken);
+        return MapToDto(app, includeSecret: true, repoMap);
     }
-
 
     /// <inheritdoc />
     public async Task<ChatAppDto?> GetAppByAppIdAsync(string appId, CancellationToken cancellationToken = default)
@@ -207,23 +243,25 @@ public class ChatAppService : IChatAppService
         var app = await _context.ChatApps
             .FirstOrDefaultAsync(a => a.AppId == appId && !a.IsDeleted, cancellationToken);
 
-        return app != null ? MapToDto(app, includeSecret: false) : null;
+        if (app == null) return null;
+        var repoMap = await LoadRepositoryMapAsync(cancellationToken);
+        return MapToDto(app, includeSecret: false, repoMap);
     }
 
     /// <inheritdoc />
     public async Task<ChatAppDto?> UpdateAppAsync(Guid id, string userId, UpdateChatAppDto dto, CancellationToken cancellationToken = default)
     {
         var app = await _context.ChatApps
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && !a.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted, cancellationToken);
 
         if (app == null)
         {
             return null;
         }
 
-        if (dto.Name != null) app.Name = dto.Name;
-        if (dto.Description != null) app.Description = dto.Description;
-        if (dto.IconUrl != null) app.IconUrl = dto.IconUrl;
+        if (dto.Name != null) app.Name = dto.Name.Trim();
+        if (dto.Description != null) app.Description = dto.Description.Trim();
+        if (dto.IconUrl != null) app.IconUrl = dto.IconUrl.Trim();
         if (dto.EnableDomainValidation.HasValue) app.EnableDomainValidation = dto.EnableDomainValidation.Value;
         if (dto.AllowedDomains != null) app.AllowedDomains = JsonSerializer.Serialize(dto.AllowedDomains);
         if (dto.AiProviderId != null) app.AiProviderId = dto.AiProviderId;
@@ -245,21 +283,35 @@ public class ChatAppService : IChatAppService
         if (dto.DefaultModel != null) app.DefaultModel = dto.DefaultModel;
         if (dto.RateLimitPerMinute.HasValue) app.RateLimitPerMinute = dto.RateLimitPerMinute;
         if (dto.IsActive.HasValue) app.IsActive = dto.IsActive.Value;
+        if (dto.GroupName != null) app.GroupName = string.IsNullOrWhiteSpace(dto.GroupName) ? "业务系统智能体" : dto.GroupName.Trim();
+        if (dto.RepositoryIds != null)
+        {
+            var normalizedRepoIds = dto.RepositoryIds
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            app.RepositoryIds = JsonSerializer.Serialize(normalizedRepoIds);
+        }
+        if (dto.SystemPrompt != null) app.SystemPrompt = dto.SystemPrompt.Trim();
+        if (dto.IsPublic.HasValue) app.IsPublic = dto.IsPublic.Value;
+        if (dto.AllowedEmployeeNos != null) app.AllowedEmployeeNos = NormalizeEmployeeNos(dto.AllowedEmployeeNos);
 
         app.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Updated chat app {AppId}", app.AppId);
+        _logger.LogInformation("Updated chat app {AppId} ({Name})", app.AppId, app.Name);
 
-        return MapToDto(app, includeSecret: true);
+        var repoMap = await LoadRepositoryMapAsync(cancellationToken);
+        return MapToDto(app, includeSecret: true, repoMap);
     }
 
     /// <inheritdoc />
     public async Task<bool> DeleteAppAsync(Guid id, string userId, CancellationToken cancellationToken = default)
     {
         var app = await _context.ChatApps
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && !a.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted, cancellationToken);
 
         if (app == null)
         {
@@ -276,12 +328,11 @@ public class ChatAppService : IChatAppService
         return true;
     }
 
-
     /// <inheritdoc />
     public async Task<string?> RegenerateSecretAsync(Guid id, string userId, CancellationToken cancellationToken = default)
     {
         var app = await _context.ChatApps
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && !a.IsDeleted, cancellationToken);
+            .FirstOrDefaultAsync(a => a.Id == id && !a.IsDeleted, cancellationToken);
 
         if (app == null)
         {
@@ -301,7 +352,6 @@ public class ChatAppService : IChatAppService
     /// <inheritdoc />
     public string GenerateAppId()
     {
-        // Generate a unique AppId with prefix "app_" followed by 24 random hex characters
         var bytes = new byte[12];
         RandomNumberGenerator.Fill(bytes);
         return $"app_{Convert.ToHexString(bytes).ToLowerInvariant()}";
@@ -310,10 +360,107 @@ public class ChatAppService : IChatAppService
     /// <inheritdoc />
     public string GenerateAppSecret()
     {
-        // Generate a secure AppSecret with prefix "sk_" followed by 48 random hex characters
         var bytes = new byte[24];
         RandomNumberGenerator.Fill(bytes);
         return $"sk_{Convert.ToHexString(bytes).ToLowerInvariant()}";
+    }
+
+    /// <summary>
+    /// 自动将现有的业务系统仓库组（如“南通机物料”、“mqg”）初始化为智能体应用（若尚未创建）
+    /// </summary>
+    private async Task EnsureDefaultBusinessSystemAppsAsync(string fallbackUserId, CancellationToken cancellationToken)
+    {
+        var existingApps = await _context.ChatApps
+            .AsNoTracking()
+            .Where(a => !a.IsDeleted)
+            .ToListAsync(cancellationToken);
+
+        if (existingApps.Count > 0)
+        {
+            return;
+        }
+
+        var repos = await _context.Repositories
+            .AsNoTracking()
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        if (repos.Count == 0)
+        {
+            return;
+        }
+
+        var defaultProvider = await _context.AiProviderConfigs
+            .AsNoTracking()
+            .Where(p => p.IsActive && !p.IsDeleted)
+            .OrderBy(p => p.SortOrder)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var defaultModel = defaultProvider?.DefaultModelId;
+        if (string.IsNullOrWhiteSpace(defaultModel) && defaultProvider != null)
+        {
+            defaultModel = await _context.AiModelConfigs
+                .AsNoTracking()
+                .Where(m => m.ProviderId == defaultProvider.Id && m.IsActive && !m.IsDeleted)
+                .OrderByDescending(m => m.IsDefault)
+                .Select(m => m.ModelId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var groupedByOrg = repos.GroupBy(r => r.OrgName, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in groupedByOrg)
+        {
+            var items = group.ToList();
+            var systemName = items[0].OrgName;
+            var repoIds = items.Select(r => r.Id).ToList();
+            var subNames = string.Join(" + ", items.Select(r => r.RepoName));
+            var description = items.Select(r => r.Description).FirstOrDefault(d => !string.IsNullOrWhiteSpace(d))
+                              ?? $"「{systemName}」业务系统智能体（已联合挂载 {subNames} 知识库，对外提供统一问答与接口方案设计）";
+
+            var app = new ChatApp
+            {
+                Id = Guid.NewGuid(),
+                UserId = items[0].OwnerUserId ?? fallbackUserId,
+                Name = systemName,
+                Description = description,
+                AppId = GenerateAppId(),
+                AppSecret = GenerateAppSecret(),
+                AiProviderId = defaultProvider?.Id,
+                ProviderType = defaultProvider?.ProviderType ?? "OpenAI",
+                DefaultModel = defaultModel,
+                AvailableModels = !string.IsNullOrWhiteSpace(defaultModel) ? JsonSerializer.Serialize(new[] { defaultModel }) : null,
+                GroupName = "业务系统智能体",
+                RepositoryIds = JsonSerializer.Serialize(repoIds),
+                IsPublic = items.All(r => r.IsPublic),
+                AllowedEmployeeNos = NormalizeEmployeeNos(string.Join(",", items.Select(r => r.AllowedEmployeeNos).Where(x => !string.IsNullOrWhiteSpace(x)))),
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.ChatApps.Add(app);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<Dictionary<string, ChatAppBoundRepoDto>> LoadRepositoryMapAsync(CancellationToken cancellationToken)
+    {
+        var repos = await _context.Repositories
+            .AsNoTracking()
+            .Where(r => !r.IsDeleted)
+            .Select(r => new ChatAppBoundRepoDto
+            {
+                Id = r.Id,
+                OrgName = r.OrgName,
+                RepoName = r.RepoName,
+                Description = r.Description,
+                StatusName = r.Status.ToString(),
+                IsPublic = r.IsPublic
+            })
+            .ToListAsync(cancellationToken);
+
+        return repos.ToDictionary(r => r.Id, StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<string?> CreateProviderFromLegacyAppConfigAsync(
@@ -375,11 +522,17 @@ public class ChatAppService : IChatAppService
         return provider.Id;
     }
 
-    /// <summary>
-    /// Maps a ChatApp entity to a DTO.
-    /// </summary>
-    private static ChatAppDto MapToDto(ChatApp app, bool includeSecret)
+    private static ChatAppDto MapToDto(
+        ChatApp app,
+        bool includeSecret,
+        Dictionary<string, ChatAppBoundRepoDto> repoMap)
     {
+        var repoIds = ParseJsonArray(app.RepositoryIds);
+        var boundRepos = repoIds
+            .Where(id => repoMap.ContainsKey(id))
+            .Select(id => repoMap[id])
+            .ToList();
+
         return new ChatAppDto
         {
             Id = app.Id,
@@ -399,14 +552,17 @@ public class ChatAppService : IChatAppService
             DefaultModel = app.DefaultModel,
             RateLimitPerMinute = app.RateLimitPerMinute,
             IsActive = app.IsActive,
+            GroupName = app.GroupName,
+            RepositoryIds = repoIds,
+            BoundRepositories = boundRepos,
+            SystemPrompt = app.SystemPrompt,
+            IsPublic = app.IsPublic,
+            AllowedEmployeeNos = app.AllowedEmployeeNos,
             CreatedAt = app.CreatedAt,
             UpdatedAt = app.UpdatedAt
         };
     }
 
-    /// <summary>
-    /// Parses a JSON array string to a list of strings.
-    /// </summary>
     private static List<string> ParseJsonArray(string? json)
     {
         if (string.IsNullOrEmpty(json))
@@ -424,9 +580,15 @@ public class ChatAppService : IChatAppService
         }
     }
 
-    /// <summary>
-    /// Masks an API key for display.
-    /// </summary>
+    private static string? NormalizeEmployeeNos(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var items = raw.Split([',', ';', ' ', '\n', '\r', '，', '；'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return items.Count == 0 ? null : string.Join(",", items);
+    }
+
     private static string? MaskApiKey(string? apiKey)
     {
         if (string.IsNullOrEmpty(apiKey) || apiKey.Length < 8)

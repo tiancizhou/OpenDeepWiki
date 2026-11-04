@@ -11,6 +11,7 @@ import { fetchRepoBranches, fetchRepoTree } from "@/lib/repository-api";
 import { ChatAssistant, buildCatalogMenu } from "@/components/chat";
 import { WithAnnouncement } from "@/components/with-announcement";
 import { buildRepoBasePath, buildRepoDocPath, buildRepoGraphifyPath, buildRepoMindMapPath } from "@/lib/repo-route";
+import { useAuth } from "@/contexts/auth-context";
 import { cn } from "@/lib/utils";
 
 interface RepoShellProps {
@@ -256,6 +257,7 @@ export function RepoShell({
   initialHasGraphifyArtifact = false,
 }: RepoShellProps) {
   const t = useTranslations("common");
+  const { isAuthenticated } = useAuth();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const urlBranch = searchParams.get("branch");
@@ -450,22 +452,28 @@ export function RepoShell({
             </div>
             <div className="truncate text-base font-semibold sm:text-lg">{title}</div>
           </div>
-          <Link
-            href="/"
-            aria-label={t("backToHome")}
-            className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-          >
-            <Home className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("backToHome")}</span>
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href="/"
+              aria-label={t("backToHome")}
+              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+            >
+              <Home className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("backToHome")}</span>
+            </Link>
+          ) : (
+            <span className="inline-flex h-8 shrink-0 items-center rounded-md border border-border/60 bg-muted/40 px-2.5 text-xs text-muted-foreground">
+              知识库原文阅读
+            </span>
+          )}
         </div>
       </div>
 
       <div className="mx-auto flex min-h-0 w-full max-w-7xl flex-1 flex-col gap-5 overflow-hidden px-4 py-5 lg:flex-row lg:px-5">
         <aside className="min-h-0 w-full shrink-0 lg:w-72">
           <div className="flex max-h-[38svh] min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-3 shadow-sm lg:h-full lg:max-h-none">
-            {sidebarBanner}
-            <div className="wiki-scrollbar mt-3 min-h-0 overflow-y-auto border-t border-border/70 pt-3 pr-1">
+            {isAuthenticated && sidebarBanner}
+            <div className={cn("wiki-scrollbar min-h-0 overflow-y-auto pr-1", isAuthenticated && "mt-3 border-t border-border/70 pt-3")}>
               <SidebarTree
                 nodes={nodes}
                 owner={owner}
@@ -491,16 +499,18 @@ export function RepoShell({
         </main>
       </div>
 
-      <ChatAssistant
-        context={{
-          owner,
-          repo,
-          branch: currentBranch,
-          language: currentLanguage,
-          currentDocPath,
-          catalogMenu: buildCatalogMenu(nodes),
-        }}
-      />
+      {isAuthenticated && (
+        <ChatAssistant
+          context={{
+            owner,
+            repo,
+            branch: currentBranch,
+            language: currentLanguage,
+            currentDocPath,
+            catalogMenu: buildCatalogMenu(nodes),
+          }}
+        />
+      )}
     </WithAnnouncement>
   );
 }

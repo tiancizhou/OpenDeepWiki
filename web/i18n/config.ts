@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shared i18n configuration — single source of truth for UI locales and wiki languages.
  *
  * Two distinct concepts live here:
@@ -26,7 +26,7 @@ export const uiLocales = [
 
 export type UiLocale = (typeof uiLocales)[number];
 
-export const defaultUiLocale: UiLocale = "en";
+export const defaultUiLocale: UiLocale = "zh";
 
 export const uiLocaleNames: Record<UiLocale, string> = {
   zh: "简体中文",
@@ -60,7 +60,7 @@ export const wikiLanguageCodes = [
 
 export type WikiLanguageCode = (typeof wikiLanguageCodes)[number];
 
-export const defaultWikiLanguage: WikiLanguageCode = "en";
+export const defaultWikiLanguage: WikiLanguageCode = "zh";
 
 /**
  * Default auto-translation target list. Keep in sync with

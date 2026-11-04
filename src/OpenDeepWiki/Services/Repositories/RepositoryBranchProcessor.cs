@@ -77,9 +77,17 @@ public sealed class RepositoryBranchProcessor(
                 }
             }
 
-            var languages = await context.BranchLanguages
+            var allLanguages = await context.BranchLanguages
                 .Where(l => l.RepositoryBranchId == branch.Id && !l.IsDeleted)
+                .OrderByDescending(l => l.IsDefault)
+                .ThenBy(l => l.CreatedAt)
                 .ToListAsync(cancellationToken);
+
+            var languages = allLanguages.Where(l => l.IsDefault).ToList();
+            if (languages.Count == 0 && allLanguages.Count > 0)
+            {
+                languages = [allLanguages[0]];
+            }
 
             if (languages.Count == 0)
             {

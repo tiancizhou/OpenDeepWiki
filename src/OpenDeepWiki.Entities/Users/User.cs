@@ -42,6 +42,12 @@ public class User : AggregateRoot<string>
     public string? Phone { get; set; }
 
     /// <summary>
+    /// 员工工号（飞书 employee_no，跨系统统一身份标识）
+    /// </summary>
+    [StringLength(64)]
+    public string? EmployeeNo { get; set; }
+
+    /// <summary>
     /// 用户状态：0-禁用，1-正常，2-待验证
     /// </summary>
     public int Status { get; set; } = 1;

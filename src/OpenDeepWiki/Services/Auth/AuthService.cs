@@ -7,7 +7,7 @@ using OpenDeepWiki.Models.Auth;
 namespace OpenDeepWiki.Services.Auth;
 
 /// <summary>
-/// 认证服务实现
+/// 认证服务实现（支持账号/用户名或邮箱登录）
 /// </summary>
 public class AuthService : IAuthService
 {
@@ -24,18 +24,27 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> LoginAsync(LoginRequest request)
     {
+        var account = (!string.IsNullOrWhiteSpace(request.Account) ? request.Account : request.Email)?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(account))
+        {
+            throw new Exception("请输入账号或用户名");
+        }
+
+        var accountLower = account.ToLowerInvariant();
         var user = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email && !u.IsDeleted);
+            .FirstOrDefaultAsync(u =>
+                !u.IsDeleted &&
+                (u.Name.ToLower() == accountLower || u.Email.ToLower() == accountLower));
 
         if (user == null)
         {
-            throw new Exception("邮箱或密码错误");
+            throw new Exception("账号或密码错误");
         }
 
         // 验证密码
         if (!VerifyPassword(request.Password, user.Password))
         {
-            throw new Exception("邮箱或密码错误");
+            throw new Exception("账号或密码错误");
         }
 
         if (user.Status != 1)
@@ -70,21 +79,31 @@ public class AuthService : IAuthService
 
     public async Task<LoginResponse> RegisterAsync(RegisterRequest request)
     {
-        // 检查邮箱是否已存在
+        var userName = request.Name.Trim();
+        var email = string.IsNullOrWhiteSpace(request.Email)
+            ? $"{userName}@internal.local"
+            : request.Email.Trim();
+
+        var userNameLower = userName.ToLowerInvariant();
+        var emailLower = email.ToLowerInvariant();
+
+        // 检查账号或邮箱是否已存在
         var existingUser = await _context.Users
-            .FirstOrDefaultAsync(u => u.Email == request.Email && !u.IsDeleted);
+            .FirstOrDefaultAsync(u =>
+                !u.IsDeleted &&
+                (u.Name.ToLower() == userNameLower || u.Email.ToLower() == emailLower));
 
         if (existingUser != null)
         {
-            throw new InvalidOperationException("该邮箱已被注册");
+            throw new InvalidOperationException("该账号已被注册");
         }
 
         // 创建新用户
         var user = new User
         {
             Id = Guid.NewGuid().ToString(),
-            Name = request.Name,
-            Email = request.Email,
+            Name = userName,
+            Email = email,
             Password = HashPassword(request.Password),
             Status = 1,
             CreatedAt = DateTime.UtcNow

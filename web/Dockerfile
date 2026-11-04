@@ -1,5 +1,5 @@
-# 依赖安装阶段
-FROM node:22-bookworm AS deps
+# 构建阶段（合并 deps 与 builder，避免 Windows Docker 下跨阶段复制 node_modules 的大开销，同时保持 package-lock 层缓存）
+FROM node:22-bookworm AS builder
 WORKDIR /app
 
 # 安装依赖
@@ -8,11 +8,6 @@ COPY package.json package-lock.json* ./
 # 解析 peer 依赖时 "Cannot read properties of null (reading 'edgesOut')" 的崩溃），构建可复现
 RUN if [ -f package-lock.json ]; then npm ci --prefer-offline --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
-# 构建阶段
-FROM node:22-bookworm AS builder
-WORKDIR /app
-
-COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # 构建时不需要 API_PROXY_URL，运行时通过环境变量动态获取

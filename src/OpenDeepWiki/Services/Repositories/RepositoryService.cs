@@ -60,10 +60,7 @@ public class RepositoryService(
                 request.LanguageCode);
         }
 
-        if (!request.IsPublic && string.IsNullOrWhiteSpace(request.AuthAccount) && string.IsNullOrWhiteSpace(request.AuthPassword))
-        {
-            throw new InvalidOperationException("仓库凭据为空时不允许设置为私有");
-        }
+        // 企业内网支持免单库密码设为私有（可复用全局 GitLab Token、SSH 密钥或内网免密访问）
 
         // 获取公开仓库的star和fork数
         int starCount = 0;
@@ -79,9 +76,9 @@ public class RepositoryService(
             }
         }
 
-        // Server-side visibility verification: check actual GitHub repo visibility
+        // Server-side visibility verification: check actual GitHub repo visibility only for github.com
         var effectiveIsPublic = request.IsPublic;
-        if (IsPublicPlatform(request.GitUrl) && !string.IsNullOrWhiteSpace(request.OrgName) && !string.IsNullOrWhiteSpace(request.RepoName))
+        if (IsGitHubPlatform(request.GitUrl) && !string.IsNullOrWhiteSpace(request.OrgName) && !string.IsNullOrWhiteSpace(request.RepoName))
         {
             var repoInfo = await gitPlatformService.CheckRepoExistsAsync(request.OrgName, request.RepoName);
             if (repoInfo.Exists)
@@ -240,7 +237,8 @@ public class RepositoryService(
             var lowerKeyword = keyword.ToLower();
             query = query.Where(r => 
                 r.OrgName.ToLower().Contains(lowerKeyword) || 
-                r.RepoName.ToLower().Contains(lowerKeyword));
+                r.RepoName.ToLower().Contains(lowerKeyword) ||
+                (r.Description != null && r.Description.ToLower().Contains(lowerKeyword)));
         }
 
         if (!string.IsNullOrWhiteSpace(language))
@@ -397,19 +395,7 @@ public class RepositoryService(
                 }
             }
 
-            // 无密码仓库不能设为私有
-            if (!request.IsPublic && string.IsNullOrWhiteSpace(repository.AuthPassword))
-            {
-                return Results.BadRequest(new UpdateVisibilityResponse
-                {
-                    Id = request.RepositoryId,
-                    IsPublic = repository.IsPublic,
-                    Success = false,
-                    ErrorMessage = "仓库凭据为空时不允许设置为私有"
-                });
-            }
-
-            // 更新可见性
+            // 更新可见性（企业内网支持免密码切换为私有/内部可见）
             repository.IsPublic = request.IsPublic;
             await context.SaveChangesAsync();
 
@@ -448,6 +434,24 @@ public class RepositoryService(
             var uri = new Uri(gitUrl);
             var host = uri.Host.ToLowerInvariant();
             return host is "github.com" or "gitee.com" or "gitlab.com";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool IsGitHubPlatform(string gitUrl)
+    {
+        if (!RepositorySource.IsGit(gitUrl))
+        {
+            return false;
+        }
+
+        try
+        {
+            var uri = new Uri(gitUrl);
+            return string.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {

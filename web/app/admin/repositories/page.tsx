@@ -495,6 +495,7 @@ export default function AdminRepositoriesPage() {
                 />
               </TableHead>
               <TableHead>{t("admin.repositories.repository")}</TableHead>
+              <TableHead>创建人</TableHead>
               <TableHead>{t("admin.repositories.visibility")}</TableHead>
               <TableHead>{t("admin.repositories.status")}</TableHead>
               <TableHead>{t("admin.repositories.statistics")}</TableHead>
@@ -557,6 +558,11 @@ export default function AdminRepositoriesPage() {
                       </div>
                     )}
                   </div>
+                </TableCell>
+                <TableCell className="whitespace-nowrap">
+                  <Badge variant="outline" className="font-normal text-xs">
+                    {repo.ownerUserName || "admin"}
+                  </Badge>
                 </TableCell>
                 <TableCell>
                   {repo.isPublic ? (

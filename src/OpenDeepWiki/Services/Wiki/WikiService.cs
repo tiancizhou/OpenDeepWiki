@@ -61,7 +61,7 @@ public class WikiService(IContext context)
 
         var catalog = await context.DocCatalogs
             .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.BranchLanguageId == language.Id && c.Path == normalizedPath);
+            .FirstOrDefaultAsync(c => c.BranchLanguageId == language.Id && c.Path == normalizedPath && !c.IsDeleted);
 
         if (catalog is null)
         {
@@ -84,7 +84,7 @@ public class WikiService(IContext context)
 
         var docFile = await context.DocFiles
             .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.Id == catalog.DocFileId);
+            .FirstOrDefaultAsync(f => f.Id == catalog.DocFileId && !f.IsDeleted);
 
         if (docFile is null)
         {
@@ -103,7 +103,7 @@ public class WikiService(IContext context)
     {
         var repository = await context.Repositories
             .AsNoTracking()
-            .FirstOrDefaultAsync(r => r.OrgName == org && r.RepoName == repo);
+            .FirstOrDefaultAsync(r => r.OrgName == org && r.RepoName == repo && !r.IsDeleted);
 
         if (repository is null)
         {
@@ -117,7 +117,7 @@ public class WikiService(IContext context)
     {
         var branches = await context.RepositoryBranches
             .AsNoTracking()
-            .Where(b => b.RepositoryId == repositoryId)
+            .Where(b => b.RepositoryId == repositoryId && !b.IsDeleted)
             .ToListAsync();
 
         if (branches.Count == 0)
@@ -134,7 +134,7 @@ public class WikiService(IContext context)
     {
         var languages = await context.BranchLanguages
             .AsNoTracking()
-            .Where(l => l.RepositoryBranchId == branchId)
+            .Where(l => l.RepositoryBranchId == branchId && !l.IsDeleted)
             .ToListAsync();
 
         if (languages.Count == 0)

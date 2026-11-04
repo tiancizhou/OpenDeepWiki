@@ -132,36 +132,45 @@ public class ChatLogService : IChatLogService
     public async Task<PaginatedChatLogsDto> GetLogsAsync(ChatLogQueryDto query, CancellationToken cancellationToken = default)
     {
         var queryable = _context.ChatLogs
+            .AsNoTracking()
             .Where(l => l.AppId == query.AppId && !l.IsDeleted);
 
-        // Apply date filters
+        // Apply date filters (normalized to UTC for PostgreSQL compatibility)
         if (query.StartDate.HasValue)
         {
-            queryable = queryable.Where(l => l.CreatedAt >= query.StartDate.Value);
+            var startUtc = NormalizeUtcDateStart(query.StartDate.Value);
+            queryable = queryable.Where(l => l.CreatedAt >= startUtc);
         }
 
         if (query.EndDate.HasValue)
         {
-            queryable = queryable.Where(l => l.CreatedAt <= query.EndDate.Value);
+            var endExclusiveUtc = NormalizeUtcDateStart(query.EndDate.Value).AddDays(1);
+            queryable = queryable.Where(l => l.CreatedAt < endExclusiveUtc);
         }
 
-        // Apply keyword filter
+        // Apply keyword filter (supports Question, AnswerSummary, UserIdentifier, SourceDomain, ModelUsed)
         if (!string.IsNullOrWhiteSpace(query.Keyword))
         {
-            var keyword = query.Keyword.ToLower();
+            var keyword = query.Keyword.Trim().ToLower();
             queryable = queryable.Where(l =>
                 l.Question.ToLower().Contains(keyword) ||
-                (l.AnswerSummary != null && l.AnswerSummary.ToLower().Contains(keyword)));
+                (l.AnswerSummary != null && l.AnswerSummary.ToLower().Contains(keyword)) ||
+                (l.UserIdentifier != null && l.UserIdentifier.ToLower().Contains(keyword)) ||
+                (l.SourceDomain != null && l.SourceDomain.ToLower().Contains(keyword)) ||
+                (l.ModelUsed != null && l.ModelUsed.ToLower().Contains(keyword)));
         }
 
         // Get total count
         var totalCount = await queryable.CountAsync(cancellationToken);
 
+        var page = Math.Max(1, query.Page);
+        var pageSize = Math.Clamp(query.PageSize, 1, 100);
+
         // Apply pagination
         var items = await queryable
             .OrderByDescending(l => l.CreatedAt)
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(l => MapToDto(l))
             .ToListAsync(cancellationToken);
 
@@ -169,8 +178,8 @@ public class ChatLogService : IChatLogService
         {
             Items = items,
             TotalCount = totalCount,
-            Page = query.Page,
-            PageSize = query.PageSize
+            Page = page,
+            PageSize = pageSize
         };
     }
 
@@ -179,6 +188,7 @@ public class ChatLogService : IChatLogService
     public async Task<ChatLogDto?> GetLogByIdAsync(Guid id, string appId, CancellationToken cancellationToken = default)
     {
         var log = await _context.ChatLogs
+            .AsNoTracking()
             .FirstOrDefaultAsync(l => l.Id == id && l.AppId == appId && !l.IsDeleted, cancellationToken);
 
         return log != null ? MapToDto(log) : null;
@@ -186,24 +196,33 @@ public class ChatLogService : IChatLogService
 
     /// <inheritdoc />
     public async Task LogChatErrorAsync(Guid sessionId, Exception ex, string modelUsed = "", CancellationToken cancellationToken = default)
-    { 
-        // Log the error details in a structured way
-        var category = ex.GetType().Name; 
-        
-        // Create a special chat log entry for this error
+    {
+        var category = ex.GetType().Name;
+
         var errorDto = new RecordChatLogDto
         {
-           AppId = "System_Error",
-           UserIdentifier = "Diagnostic",
-           Question = $"AI_FAILURE_SESSION_{sessionId}",
-           AnswerSummary = $"Error: {category} | Message: {ex.Message}",
-           ModelUsed = modelUsed
-     };
-        
+            AppId = "System_Error",
+            UserIdentifier = "Diagnostic",
+            Question = $"AI_FAILURE_SESSION_{sessionId}",
+            AnswerSummary = $"Error: {category} | Message: {ex.Message}",
+            ModelUsed = modelUsed
+        };
+
         await RecordChatLogAsync(errorDto, cancellationToken);
 
-       _logger.LogError(ex, "Critical AI Provider error recorded for session {SessionId}", sessionId);
-    } 
+        _logger.LogError(ex, "Critical AI Provider error recorded for session {SessionId}", sessionId);
+    }
+
+    private static DateTime NormalizeUtcDateStart(DateTime dt)
+    {
+        var utc = dt.Kind switch
+        {
+            DateTimeKind.Utc => dt,
+            DateTimeKind.Local => dt.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(dt, DateTimeKind.Utc)
+        };
+        return DateTime.SpecifyKind(utc.Date, DateTimeKind.Utc);
+    }
 
     /// <summary>
     /// Maps a ChatLog entity to a DTO.

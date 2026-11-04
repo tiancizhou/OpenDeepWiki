@@ -215,7 +215,7 @@ export function AdminSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold">
-                    OpenDeepWiki
+                    Zt Wiki
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
                     {t("common.adminPanel")}

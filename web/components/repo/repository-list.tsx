@@ -18,6 +18,7 @@ import {
   regenerateRepository,
 } from "@/lib/repository-api";
 import { RepositoryExplorerView } from "@/components/repo/repository-explorer-view";
+import { RepositoryGroupView } from "@/components/repo/repository-group-view";
 import type {
   RepositoryItemResponse,
   RepositoryStatus,
@@ -35,6 +36,7 @@ import {
   ChevronRight,
   LayoutGrid,
   ListTree,
+  Layers,
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -224,19 +226,19 @@ export function RepositoryList({ ownerId, refreshTrigger }: RepositoryListProps)
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingRepoId, setRetryingRepoId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"tree" | "list">("tree");
+  const [viewMode, setViewMode] = useState<"groups" | "tree" | "list">("groups");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const isTreeView = viewMode === "tree";
-  const totalPages = isTreeView ? 1 : Math.ceil(total / PAGE_SIZE);
+  const isFullFetchView = viewMode === "groups" || viewMode === "tree";
+  const totalPages = isFullFetchView ? 1 : Math.ceil(total / PAGE_SIZE);
 
   const loadRepositories = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
       const params = { ownerId };
-      const response = isTreeView
+      const response = isFullFetchView
         ? await fetchAllRepositoryList(params)
         : await fetchRepositoryList({
             ...params,
@@ -251,7 +253,7 @@ export function RepositoryList({ ownerId, refreshTrigger }: RepositoryListProps)
     } finally {
       setIsLoading(false);
     }
-  }, [isTreeView, ownerId, page]);
+  }, [isFullFetchView, ownerId, page]);
 
   // 处理可见性变化，更新本地状态
   const handleVisibilityChange = useCallback((repoId: string, newIsPublic: boolean) => {
@@ -377,7 +379,16 @@ export function RepositoryList({ ownerId, refreshTrigger }: RepositoryListProps)
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>{t("home.repository.listTitle")}</CardTitle>
           <div className="flex w-full items-center gap-2 sm:w-auto">
-            <div className="grid flex-1 grid-cols-2 rounded-lg border bg-muted/30 p-1 sm:flex sm:flex-none">
+            <div className="grid flex-1 grid-cols-3 rounded-lg border bg-muted/30 p-1 sm:flex sm:flex-none">
+              <Button
+                variant={viewMode === "groups" ? "secondary" : "ghost"}
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setViewMode("groups")}
+              >
+                <Layers className="h-4 w-4" />
+                系统仓库组
+              </Button>
               <Button
                 variant={viewMode === "tree" ? "secondary" : "ghost"}
                 size="sm"
@@ -426,7 +437,9 @@ export function RepositoryList({ ownerId, refreshTrigger }: RepositoryListProps)
           </div>
         ) : (
           <div className="space-y-4">
-            {viewMode === "tree" ? (
+            {viewMode === "groups" ? (
+              <RepositoryGroupView repositories={repositories} />
+            ) : viewMode === "tree" ? (
               <RepositoryExplorerView
                 repositories={repositories}
                 emptyMessage={t("home.repository.noRepositories")}

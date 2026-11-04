@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { useTranslations } from "@/hooks/use-translations";
 import { PublicRepositoryCard } from "./public-repository-card";
 import { RepositoryExplorerView } from "./repository-explorer-view";
+import { RepositoryGroupView } from "./repository-group-view";
 import { LanguageTags } from "./language-tags";
 import type { LanguageInfo } from "@/lib/recommendation-api";
-import type { RepositoryItemResponse } from "@/types/repository";
+import type { RepositoryItemResponse, RepositoryStatus } from "@/types/repository";
 import {
   GitBranch,
   XCircle,
@@ -18,6 +19,7 @@ import {
   ChevronRight,
   LayoutGrid,
   ListTree,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +43,8 @@ function matchesKeyword(repository: RepositoryItemResponse, keyword: string) {
 
   return (
     repository.orgName.toLowerCase().includes(query) ||
-    repository.repoName.toLowerCase().includes(query)
+    repository.repoName.toLowerCase().includes(query) ||
+    (repository.sourceLocation || "").toLowerCase().includes(query)
   );
 }
 
@@ -74,10 +77,11 @@ export function PublicRepositoryList({
 }: PublicRepositoryListProps) {
   const t = useTranslations();
   const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"tree" | "grid">("tree");
+  const [selectedStatus, setSelectedStatus] = useState<RepositoryStatus | "All">("All");
+  const [viewMode, setViewMode] = useState<"groups" | "tree" | "grid">("groups");
   const [page, setPage] = useState(1);
 
-  const isTreeView = viewMode === "tree";
+  const isUnpagedView = viewMode === "tree" || viewMode === "groups";
 
   const filteredRepositories = useMemo(() => {
     return repositories.filter((repository) => {
@@ -89,19 +93,23 @@ export function PublicRepositoryList({
         return false;
       }
 
+      if (selectedStatus !== "All" && repository.statusName !== selectedStatus) {
+        return false;
+      }
+
       return true;
     });
-  }, [keyword, repositories, selectedLanguage]);
+  }, [keyword, repositories, selectedLanguage, selectedStatus]);
 
   const total = filteredRepositories.length;
-  const totalPages = isTreeView ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const pagedRepositories = isTreeView
+  const totalPages = isUnpagedView ? 1 : Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const pagedRepositories = isUnpagedView
     ? filteredRepositories
     : filteredRepositories.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   useEffect(() => {
     setPage(1);
-  }, [keyword, selectedLanguage, viewMode]);
+  }, [keyword, selectedLanguage, selectedStatus, viewMode]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -125,8 +133,16 @@ export function PublicRepositoryList({
     }
   };
 
+  const statusOptions: Array<{ value: RepositoryStatus | "All"; label: string }> = [
+    { value: "All", label: "全部状态" },
+    { value: "Completed", label: t("home.repository.status.completed") },
+    { value: "Processing", label: t("home.repository.status.processing") },
+    { value: "Pending", label: t("home.repository.status.pending") },
+    { value: "Failed", label: t("home.repository.status.failed") },
+  ];
+
   const pagination =
-    !isTreeView && totalPages > 1 ? (
+    !isUnpagedView && totalPages > 1 ? (
       <div className="flex items-center justify-center gap-4 mt-8">
         <Button
           variant="outline"
@@ -187,24 +203,52 @@ export function PublicRepositoryList({
             </p>
           )}
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <div className="grid flex-1 grid-cols-2 rounded-lg border border-border/70 bg-muted/20 p-1 sm:flex sm:flex-none">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Status filter pills */}
+          <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-muted/20 p-1">
+            {statusOptions.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setSelectedStatus(opt.value)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                  selectedStatus === opt.value
+                    ? "bg-background text-foreground shadow-xs"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-3 rounded-lg border border-border/70 bg-muted/20 p-1 sm:flex sm:flex-none">
+            <Button
+              variant={viewMode === "groups" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 gap-1.5 rounded-md text-xs"
+              onClick={() => setViewMode("groups")}
+            >
+              <Layers className="h-3.5 w-3.5" />
+              系统仓库组
+            </Button>
             <Button
               variant={viewMode === "tree" ? "secondary" : "ghost"}
               size="sm"
-              className="h-8 gap-1.5 rounded-md"
+              className="h-7 gap-1.5 rounded-md text-xs"
               onClick={() => setViewMode("tree")}
             >
-              <ListTree className="h-4 w-4" />
+              <ListTree className="h-3.5 w-3.5" />
               {t("home.repository.view.tree")}
             </Button>
             <Button
               variant={viewMode === "grid" ? "secondary" : "ghost"}
               size="sm"
-              className="h-8 gap-1.5 rounded-md"
+              className="h-7 gap-1.5 rounded-md text-xs"
               onClick={() => setViewMode("grid")}
             >
-              <LayoutGrid className="h-4 w-4" />
+              <LayoutGrid className="h-3.5 w-3.5" />
               {t("home.repository.view.grid")}
             </Button>
           </div>
@@ -229,7 +273,7 @@ export function PublicRepositoryList({
 
       {refreshing && repositories.length === 0 ? (
         <RepositoryGridSkeleton />
-      ) : repositories.length === 0 && !keyword && !selectedLanguage ? (
+      ) : repositories.length === 0 && !keyword && !selectedLanguage && selectedStatus === "All" ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <GitBranch className="h-12 w-12 text-muted-foreground mb-4" />
           <p className="text-muted-foreground">
@@ -245,7 +289,12 @@ export function PublicRepositoryList({
         </div>
       ) : (
         <>
-          {viewMode === "tree" ? (
+          {viewMode === "groups" ? (
+            <RepositoryGroupView
+              repositories={pagedRepositories}
+              emptyMessage={t("home.publicRepository.empty")}
+            />
+          ) : viewMode === "tree" ? (
             <RepositoryExplorerView
               repositories={pagedRepositories}
               emptyMessage={t("home.publicRepository.empty")}

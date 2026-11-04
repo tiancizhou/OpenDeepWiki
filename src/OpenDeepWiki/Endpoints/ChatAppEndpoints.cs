@@ -8,7 +8,7 @@ namespace OpenDeepWiki.Endpoints;
 
 /// <summary>
 /// 用户应用管理端点
-/// 提供应用CRUD、统计查询、提问记录等API
+/// 提供应用CRUD、可挂载仓库查询、统计查询、提问记录等API
 /// </summary>
 public static class ChatAppEndpoints
 {
@@ -24,14 +24,19 @@ public static class ChatAppEndpoints
         // 获取用户应用列表
         group.MapGet("/", GetUserAppsAsync)
             .WithName("GetUserApps")
-            .WithSummary("获取当前用户的应用列表");
+            .WithSummary("获取智能体应用列表");
 
         // 创建应用
         group.MapPost("/", CreateAppAsync)
             .WithName("CreateApp")
-            .WithSummary("创建新应用");
+            .WithSummary("创建新智能体应用");
 
-        // 获取应用详情
+        // 获取可供智能体应用绑定挂载的知识库代码仓库列表
+        group.MapGet("/available-repositories", GetAvailableRepositoriesAsync)
+            .WithName("GetAppAvailableRepositories")
+            .WithSummary("获取可绑定到智能体应用的代码仓库列表");
+
+        // 获取AI提供商与模型
         group.MapGet("/ai-providers", GetAiProvidersAsync)
             .WithName("GetAppAiProviders");
 
@@ -67,13 +72,57 @@ public static class ChatAppEndpoints
             .WithName("GetAppLogs")
             .WithSummary("获取应用提问记录");
 
+        // 控制台在线问答测试（同时自动记录统计与提问记录）
+        group.MapPost("/{id:guid}/ask", AskAppOnlineAsync)
+            .WithName("AskAppOnline")
+            .WithSummary("向智能体应用发起在线问答测试");
+
         return app;
     }
 
+    public sealed class OnlineAskAppRequest
+    {
+        public string Question { get; set; } = string.Empty;
+    }
 
-    /// <summary>
-    /// 获取当前用户的应用列表
-    /// </summary>
+    private static async Task<IResult> AskAppOnlineAsync(
+        Guid id,
+        [FromBody] OnlineAskAppRequest request,
+        HttpContext httpContext,
+        [FromServices] IServiceProvider serviceProvider,
+        [FromServices] IContext context,
+        [FromServices] IChatAppService chatAppService,
+        [FromServices] IUserContext userContext,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(userContext.UserId))
+        {
+            return Results.Unauthorized();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Question))
+        {
+            return Results.BadRequest(new { message = "提问内容不能为空" });
+        }
+
+        var app = await chatAppService.GetAppByIdAsync(id, userContext.UserId, cancellationToken);
+        if (app == null)
+        {
+            return Results.NotFound(new { message = "应用不存在" });
+        }
+
+        var response = await ZtWorkEndpoints.ExecuteConsoleAgentAskAsync(
+            serviceProvider,
+            context,
+            httpContext,
+            userContext.UserId,
+            app.AppId,
+            request.Question.Trim(),
+            cancellationToken);
+
+        return Results.Ok(response);
+    }
+
     private static async Task<IResult> GetUserAppsAsync(
         [FromServices] IChatAppService chatAppService,
         [FromServices] IUserContext userContext,
@@ -88,9 +137,6 @@ public static class ChatAppEndpoints
         return Results.Ok(apps);
     }
 
-    /// <summary>
-    /// 创建新应用
-    /// </summary>
     private static async Task<IResult> CreateAppAsync(
         [FromBody] CreateChatAppDto dto,
         [FromServices] IChatAppService chatAppService,
@@ -111,9 +157,29 @@ public static class ChatAppEndpoints
         return Results.Created($"/api/v1/apps/{app.Id}", app);
     }
 
-    /// <summary>
-    /// 获取应用详情
-    /// </summary>
+    private static async Task<IResult> GetAvailableRepositoriesAsync(
+        [FromServices] IContext context,
+        CancellationToken cancellationToken)
+    {
+        var repos = await context.Repositories
+            .AsNoTracking()
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.OrgName)
+            .ThenBy(r => r.RepoName)
+            .Select(r => new ChatAppBoundRepoDto
+            {
+                Id = r.Id,
+                OrgName = r.OrgName,
+                RepoName = r.RepoName,
+                Description = r.Description,
+                StatusName = r.Status.ToString(),
+                IsPublic = r.IsPublic
+            })
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(repos);
+    }
+
     private static async Task<IResult> GetAiProvidersAsync(
         [FromServices] IContext context,
         CancellationToken cancellationToken)
@@ -176,10 +242,6 @@ public static class ChatAppEndpoints
         return Results.Ok(app);
     }
 
-
-    /// <summary>
-    /// 更新应用配置
-    /// </summary>
     private static async Task<IResult> UpdateAppAsync(
         Guid id,
         [FromBody] UpdateChatAppDto dto,
@@ -201,9 +263,6 @@ public static class ChatAppEndpoints
         return Results.Ok(app);
     }
 
-    /// <summary>
-    /// 删除应用
-    /// </summary>
     private static async Task<IResult> DeleteAppAsync(
         Guid id,
         [FromServices] IChatAppService chatAppService,
@@ -224,9 +283,6 @@ public static class ChatAppEndpoints
         return Results.NoContent();
     }
 
-    /// <summary>
-    /// 重新生成应用密钥
-    /// </summary>
     private static async Task<IResult> RegenerateSecretAsync(
         Guid id,
         [FromServices] IChatAppService chatAppService,
@@ -247,10 +303,6 @@ public static class ChatAppEndpoints
         return Results.Ok(new { appSecret = newSecret });
     }
 
-
-    /// <summary>
-    /// 获取应用使用统计
-    /// </summary>
     private static async Task<IResult> GetAppStatisticsAsync(
         Guid id,
         [FromServices] IChatAppService chatAppService,
@@ -265,14 +317,12 @@ public static class ChatAppEndpoints
             return Results.Unauthorized();
         }
 
-        // Verify the app belongs to the user
         var app = await chatAppService.GetAppByIdAsync(id, userContext.UserId, cancellationToken);
         if (app == null)
         {
             return Results.NotFound(new { message = "应用不存在" });
         }
 
-        // Default to last 30 days if not specified
         var start = startDate ?? DateTime.UtcNow.AddDays(-30);
         var end = endDate ?? DateTime.UtcNow;
 
@@ -280,9 +330,6 @@ public static class ChatAppEndpoints
         return Results.Ok(statistics);
     }
 
-    /// <summary>
-    /// 获取应用提问记录
-    /// </summary>
     private static async Task<IResult> GetAppLogsAsync(
         Guid id,
         [FromServices] IChatAppService chatAppService,
@@ -300,7 +347,6 @@ public static class ChatAppEndpoints
             return Results.Unauthorized();
         }
 
-        // Verify the app belongs to the user
         var app = await chatAppService.GetAppByIdAsync(id, userContext.UserId, cancellationToken);
         if (app == null)
         {
@@ -314,7 +360,7 @@ public static class ChatAppEndpoints
             EndDate = endDate,
             Keyword = keyword,
             Page = page,
-            PageSize = Math.Min(pageSize, 100) // Limit max page size
+            PageSize = Math.Min(pageSize, 100)
         };
 
         var logs = await chatLogService.GetLogsAsync(query, cancellationToken);

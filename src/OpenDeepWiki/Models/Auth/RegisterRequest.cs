@@ -8,17 +8,15 @@ namespace OpenDeepWiki.Models.Auth;
 public class RegisterRequest
 {
     /// <summary>
-    /// 用户名
+    /// 账号/用户名
     /// </summary>
-    [Required(ErrorMessage = "用户名不能为空")]
-    [StringLength(50, MinimumLength = 2, ErrorMessage = "用户名长度必须在2-50之间")]
+    [Required(ErrorMessage = "账号不能为空")]
+    [StringLength(50, MinimumLength = 2, ErrorMessage = "账号长度必须在2-50之间")]
     public string Name { get; set; } = string.Empty;
 
     /// <summary>
-    /// 邮箱
+    /// 邮箱（可选，未传时默认生成内部邮箱标识）
     /// </summary>
-    [Required(ErrorMessage = "邮箱不能为空")]
-    [EmailAddress(ErrorMessage = "邮箱格式不正确")]
     public string Email { get; set; } = string.Empty;
 
     /// <summary>

@@ -494,7 +494,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <p>{systemVersion?.productName || "OpenDeepWiki"} v{systemVersion?.version || "1.0.0"}</p>
+                <p>{systemVersion?.productName || "Zt Wiki"} v{systemVersion?.version || "1.0.0"}</p>
                 <p>{t("settings.aboutDescription")}</p>
               </div>
             </CardContent>

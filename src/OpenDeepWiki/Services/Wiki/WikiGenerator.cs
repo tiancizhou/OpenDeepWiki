@@ -148,7 +148,7 @@ public class WikiGenerator : IWikiGenerator
         branchLanguage.MindMapStatus = MindMapStatus.Processing;
         await _context.SaveChangesAsync(cancellationToken);
 
-        await LogProcessingAsync(ProcessingStep.Catalog, $"Starting mind map generation ({branchLanguage.LanguageCode})", cancellationToken);
+        await LogProcessingAsync(ProcessingStep.MindMap, $"Starting mind map generation ({branchLanguage.LanguageCode})", cancellationToken);
 
         try
         {
@@ -208,7 +208,7 @@ Remember to call WriteMindMapAsync with the complete mind map content.
                 userMessage,
                 tools,
                 "MindMapGeneration",
-                ProcessingStep.Catalog,
+                ProcessingStep.MindMap,
                 CreateWikiAiContext(
                     "wiki_mindmap_generation",
                     "仓库思维导图生成",
@@ -222,7 +222,7 @@ Remember to call WriteMindMapAsync with the complete mind map content.
                 "Mind map generation completed successfully. Repository: {Org}/{Repo}, Language: {Language}, Duration: {Duration}ms",
                 workspace.Organization, workspace.RepositoryName, branchLanguage.LanguageCode, stopwatch.ElapsedMilliseconds);
 
-            await LogProcessingAsync(ProcessingStep.Catalog,
+            await LogProcessingAsync(ProcessingStep.MindMap,
                 $"Mind map generation complete, time: {stopwatch.ElapsedMilliseconds}ms",
                 cancellationToken);
         }
@@ -2456,18 +2456,7 @@ Translated mind map:";
                 treeBudget.ExcludedEntries,
                 scanPlan.ProfileHash ?? "none");
 
-            var collectLogMessage = $"Repository directory tree collected. ScanPlanSource: {scanPlan.Source}, DirectoryDepth: {scanPlan.DirectoryTreeDepth}, FileDepth: {scanPlan.FileListDepth}, MaxTreeNodes: {scanPlan.MaxTreeNodes}, MaxFilesPerDirectory: {scanPlan.MaxFilesPerDirectory}, MaxTotalFiles: {scanPlan.MaxTotalFiles}";
-            var repositoryId = _currentRepositoryId.Value;
-            if (!string.IsNullOrEmpty(repositoryId))
-            {
-                await _processingLogService.LogAsync(
-                    repositoryId,
-                    _currentBranchId.Value,
-                    _currentGenerationTaskId.Value,
-                    ProcessingStep.Workspace,
-                    collectLogMessage,
-                    cancellationToken: cancellationToken);
-            }
+            // Do not log ProcessingStep.Workspace inside CollectRepositoryContextAsync because it is called during Catalog/MindMap steps
             
             // 3. Read README content (truncated if too long)
             context.ReadmeContent = ReadReadmeContent(rootDir, _options.ReadmeMaxLength);
@@ -2498,10 +2487,6 @@ Translated mind map:";
         }
 
         var plan = await _scanPlanResolver.ResolveAndEnsureAsync(_context, repository, workingDirectory, cancellationToken);
-        await LogProcessingAsync(
-            ProcessingStep.Workspace,
-            $"Scan plan: {plan.Source}, directoryDepth={plan.DirectoryTreeDepth}, fileDepth={plan.FileListDepth}, maxNodes={plan.MaxTreeNodes}, maxFilesPerDirectory={plan.MaxFilesPerDirectory}, maxTotalFiles={plan.MaxTotalFiles}, profileHash={plan.ProfileHash ?? "none"}",
-            cancellationToken);
         return plan;
     }
 

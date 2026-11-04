@@ -210,6 +210,11 @@ public class IncrementalUpdateService : IIncrementalUpdateService
                 .ToListAsync(cancellationToken);
 
             var updatedDocumentsCount = 0;
+            if (_wikiGenerator is WikiGenerator wikiGeneratorImpl)
+            {
+                wikiGeneratorImpl.SetCurrentRepository(repositoryId, $"{repository.OrgName}/{repository.RepoName}");
+                wikiGeneratorImpl.SetCurrentGenerationContext(branchId, null);
+            }
 
             foreach (var branchLanguage in branchLanguages)
             {

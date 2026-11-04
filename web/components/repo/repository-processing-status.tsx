@@ -240,17 +240,23 @@ export function RepositoryProcessingStatus({
 
   const config = statusConfig[status];
   const Icon = config.icon;
-  const currentStepIndex = Math.max(0, processingSteps.findIndex((step) => step.id === currentStep));
-  const finalStepIndex = processingSteps.length - 1;
   const safeTotalDocuments = Math.max(totalDocuments, 0);
   const safeCompletedDocuments = Math.max(completedDocuments, 0);
+  const effectiveStep: ProcessingStep =
+    safeTotalDocuments > 0 && (currentStep === "Workspace" || currentStep === "Catalog")
+      ? safeCompletedDocuments >= safeTotalDocuments
+        ? "MindMap"
+        : "Content"
+      : currentStep;
+  const currentStepIndex = Math.max(0, processingSteps.findIndex((step) => step.id === effectiveStep));
+  const finalStepIndex = processingSteps.length - 1;
   const displayedCompletedDocuments = safeTotalDocuments > 0
     ? Math.min(safeCompletedDocuments, safeTotalDocuments)
     : safeCompletedDocuments;
   const documentPercent = safeTotalDocuments > 0
     ? Math.min(Math.round((displayedCompletedDocuments / safeTotalDocuments) * 100), 100)
     : 0;
-  const activeStepFraction = currentStep === "Content" && safeTotalDocuments > 0
+  const activeStepFraction = effectiveStep === "Content" && safeTotalDocuments > 0
     ? documentPercent / 100
     : 0;
   const overallPercent = status === "Completed"

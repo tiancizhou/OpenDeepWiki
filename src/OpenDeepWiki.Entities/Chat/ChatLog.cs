@@ -28,9 +28,8 @@ public class ChatLog : AggregateRoot<Guid>
     public string Question { get; set; } = string.Empty;
 
     /// <summary>
-    /// AI回复摘要
+    /// AI回复内容（完整回答与结论概要）
     /// </summary>
-    [StringLength(500)]
     public string? AnswerSummary { get; set; }
 
     /// <summary>

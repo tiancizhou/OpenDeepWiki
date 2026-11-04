@@ -4,7 +4,7 @@ namespace OpenDeepWiki.Entities;
 
 /// <summary>
 /// 用户创建的对话应用实体
-/// 包含AppId、AppSecret和配置信息，用于嵌入到外部网站
+/// 包含AppId、AppSecret和配置信息，用于嵌入到外部网站、ZtWork 连接器及 MCP 服务
 /// </summary>
 public class ChatApp : AggregateRoot<Guid>
 {
@@ -35,7 +35,7 @@ public class ChatApp : AggregateRoot<Guid>
     public string? IconUrl { get; set; }
 
     /// <summary>
-    /// 公开的应用ID（用于嵌入脚本）
+    /// 公开的应用ID（用于嵌入脚本、ZtWork 项目ID、MCP 路由）
     /// </summary>
     [Required]
     [StringLength(64)]
@@ -66,6 +66,9 @@ public class ChatApp : AggregateRoot<Guid>
     [StringLength(50)]
     public string ProviderType { get; set; } = "OpenAI";
 
+    /// <summary>
+    /// 关联的 AI 提供商配置 ID
+    /// </summary>
     [StringLength(100)]
     public string? AiProviderId { get; set; }
 
@@ -102,4 +105,33 @@ public class ChatApp : AggregateRoot<Guid>
     /// 是否激活
     /// </summary>
     public bool IsActive { get; set; } = true;
+
+    /// <summary>
+    /// 业务分组名称（供 ZtWork 连接器按分组折叠展示，如“采购供应”、“制造执行”）
+    /// </summary>
+    [StringLength(100)]
+    public string? GroupName { get; set; }
+
+    /// <summary>
+    /// 绑定的知识库代码仓库 ID 列表（JSON 数组，支持前后端多仓库联合挂载）
+    /// </summary>
+    [StringLength(4000)]
+    public string? RepositoryIds { get; set; }
+
+    /// <summary>
+    /// 智能体专属系统提示词（System Prompt）
+    /// </summary>
+    [StringLength(4000)]
+    public string? SystemPrompt { get; set; }
+
+    /// <summary>
+    /// 是否全员可见（ZtWork 连接器及内部成员默认可访问）
+    /// </summary>
+    public bool IsPublic { get; set; } = true;
+
+    /// <summary>
+    /// 允许访问的飞书员工工号白名单（逗号分隔，如 "64308,zt64003"）
+    /// </summary>
+    [StringLength(2000)]
+    public string? AllowedEmployeeNos { get; set; }
 }

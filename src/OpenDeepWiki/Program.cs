@@ -361,7 +361,9 @@ try
                 };
             })
             .WithTools<McpGlobalTools>()
-            .WithTools<McpRepositoryTools>();
+            .WithTools<McpGlobalTools>()
+            .WithTools<McpRepositoryTools>()
+            .WithTools<McpAgentAppTools>();
     }
 
     var app = builder.Build();
@@ -387,6 +389,7 @@ try
     }
 
     app.UseAuthentication();
+    app.UseApiKeyAuthentication();
     app.UseAuthorization();
 
     // 限流放在认证之后，使分区策略能区分登录用户与匿名流量
@@ -398,6 +401,8 @@ try
         app.UseMcpUsageLogging("/api/mcp");
         app.UseSseKeepAlive("/api/mcp");
         app.MapMcp("/api/mcp");
+        app.MapMcp("/api/mcp");
+        app.MapMcp("/api/mcp/app/{appId}");
         app.MapMcp("/api/mcp/{owner}/{repo}");
 
         if (mcpOAuthEnabled)
@@ -424,6 +429,8 @@ try
     app.MapIncrementalUpdateEndpoints();
     app.MapBranchGenerationEndpoints();
     app.MapMcpProviderEndpoints();
+    app.MapOpenPlatformEndpoints();
+    app.MapZtWorkEndpoints();
 
     // 初始化数据库（创建默认数据）
     using (var scope = app.Services.CreateScope())
