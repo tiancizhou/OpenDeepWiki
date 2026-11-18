@@ -464,32 +464,83 @@ public class ChatAssistantService : IChatAssistantService
         // Build tools
         var tools = new List<AITool>();
 
-        // Calculate repository path from Owner/Repo
+        // Query current repository and sibling repositories in the same system group (OrgName)
+        var groupRepos = await _context.Repositories
+            .AsNoTracking()
+            .Where(r => !r.IsDeleted && r.OrgName == request.Context.Owner)
+            .ToListAsync(cancellationToken);
+
+        var currentRepoEntity = groupRepos.FirstOrDefault(r =>
+            string.Equals(r.RepoName, request.Context.Repo, StringComparison.OrdinalIgnoreCase));
+
+        var orderedRepos = new List<Entities.Repository>();
+        if (currentRepoEntity != null)
+        {
+            orderedRepos.Add(currentRepoEntity);
+        }
+        // Include sibling sub-repositories in the same business system group (e.g. frontend + backend)
+        if (groupRepos.Count <= 6)
+        {
+            orderedRepos.AddRange(groupRepos.Where(r => currentRepoEntity == null || r.Id != currentRepoEntity.Id));
+        }
+
+        var repoBranches = orderedRepos.Count > 0
+            ? await _context.RepositoryBranches
+                .AsNoTracking()
+                .Where(b => !b.IsDeleted && orderedRepos.Select(x => x.Id).Contains(b.RepositoryId))
+                .ToListAsync(cancellationToken)
+            : [];
+
+        // Calculate repository path from Owner/Repo and sibling repos
         var repositoryPath = GetRepositoryPath(request.Context.Owner, request.Context.Repo, request.Context.Branch);
 
-        // Initialize GitTool with calculated repository path
+        // Initialize GitTool with primary repository first (preserving relative path resolution) + sibling workspaces
         GitTool? gitTool = null;
-        if (Directory.Exists(repositoryPath))
+        try
         {
-            try
+            var workspaceConfigs = new List<GitWorkspaceConfig>();
+            if (Directory.Exists(repositoryPath))
             {
-                // Checkout to the specified branch before initializing GitTool
                 CheckoutBranch(repositoryPath, request.Context.Branch);
-
-                gitTool = new GitTool(repositoryPath);
-                tools.AddRange(gitTool.GetTools());
-                _logger.LogInformation("GitTool initialized for {Owner}/{Repo}@{Branch} with path {RepoPath}",
-                    request.Context.Owner, request.Context.Repo, request.Context.Branch, repositoryPath);
+                workspaceConfigs.Add(new GitWorkspaceConfig(
+                    request.Context.Repo,
+                    repositoryPath,
+                    request.Context.Branch,
+                    currentRepoEntity?.AuthAccount,
+                    currentRepoEntity?.AuthPassword));
             }
-            catch (Exception ex)
+
+            foreach (var sib in orderedRepos.Where(r => !string.Equals(r.RepoName, request.Context.Repo, StringComparison.OrdinalIgnoreCase)))
             {
-                _logger.LogWarning(ex, "Failed to initialize GitTool for {Owner}/{Repo}@{Branch}",
-                    request.Context.Owner, request.Context.Repo, request.Context.Branch);
+                var sibBranch = repoBranches.FirstOrDefault(b => b.RepositoryId == sib.Id)?.BranchName ?? request.Context.Branch;
+                var sibPath = GetRepositoryPath(sib.OrgName, sib.RepoName, sibBranch);
+                if (Directory.Exists(sibPath))
+                {
+                    workspaceConfigs.Add(new GitWorkspaceConfig(
+                        sib.RepoName,
+                        sibPath,
+                        sibBranch,
+                        sib.AuthAccount,
+                        sib.AuthPassword));
+                }
+            }
+
+            if (workspaceConfigs.Count > 0)
+            {
+                gitTool = new GitTool(workspaceConfigs);
+                tools.AddRange(gitTool.GetTools(includeChangeHistory: true));
+                _logger.LogInformation("GitTool initialized for {Owner}/{Repo}@{Branch} ({WorkspaceCount} workspaces)",
+                    request.Context.Owner, request.Context.Repo, request.Context.Branch, workspaceConfigs.Count);
+            }
+            else
+            {
+                _logger.LogWarning("Repository path does not exist: {RepoPath}", repositoryPath);
             }
         }
-        else
+        catch (Exception ex)
         {
-            _logger.LogWarning("Repository path does not exist: {RepoPath}", repositoryPath);
+            _logger.LogWarning(ex, "Failed to initialize GitTool for {Owner}/{Repo}@{Branch}",
+                request.Context.Owner, request.Context.Repo, request.Context.Branch);
         }
 
         // Add ChatDocReaderTool with dynamic catalog
@@ -501,6 +552,12 @@ public class ChatAssistantService : IChatAssistantService
             request.Context.Language,
             cancellationToken);
         tools.Add(chatDocReaderTool.GetTool());
+
+        // Add Wiki daily change report tool
+        if (orderedRepos.Count > 0)
+        {
+            tools.Add(WikiChangeReportTool.CreateTool(_contextFactory, orderedRepos.Select(r => r.Id).ToArray()));
+        }
 
         // Add MCP tools
         if (config.EnabledMcpIds.Count > 0)
@@ -519,8 +576,49 @@ public class ChatAssistantService : IChatAssistantService
         }
 
 
+        // Preload daily Git + Wiki change summary when the user asks about daily/recent additions or modifications
+        string? preloadedChangesReport = null;
+        var lastUserQuestion = request.Messages
+            .LastOrDefault(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase))?.Content;
+        if (!string.IsNullOrWhiteSpace(lastUserQuestion) && WikiChangeReportTool.IsChangeHistoryQuestion(lastUserQuestion))
+        {
+            var reportSb = new StringBuilder();
+            if (gitTool != null)
+            {
+                var gitSummary = await gitTool.BuildPreloadedGitChangeSummaryAsync(
+                    lastUserQuestion,
+                    maxDiffChars: 12000,
+                    cancellationToken: cancellationToken);
+                if (!string.IsNullOrWhiteSpace(gitSummary))
+                {
+                    reportSb.AppendLine(gitSummary);
+                }
+            }
+
+            if (orderedRepos.Count > 0)
+            {
+                var (sinceBj, untilBj, rangeLabel) = WikiChangeReportTool.ParseBeijingDateWindow(null, null, lastUserQuestion);
+                var wikiSummary = await WikiChangeReportTool.QueryWikiChangesAsync(
+                    _context,
+                    orderedRepos.Select(r => r.Id).ToArray(),
+                    sinceBj,
+                    untilBj,
+                    rangeLabel,
+                    cancellationToken);
+                if (!string.IsNullOrWhiteSpace(wikiSummary))
+                {
+                    reportSb.AppendLine(wikiSummary);
+                }
+            }
+
+            if (reportSb.Length > 0)
+            {
+                preloadedChangesReport = reportSb.ToString().Trim();
+            }
+        }
+
         // Build system prompt
-        var systemPrompt = BuildSystemPrompt(request.Context, gitTool != null);
+        var systemPrompt = BuildSystemPrompt(request.Context, gitTool != null, preloadedChangesReport);
 
         // Create agent
         var agentOptions = new ChatClientAgentOptions
@@ -960,7 +1058,7 @@ public class ChatAssistantService : IChatAssistantService
     /// Builds the system prompt with document context.
     /// Uses XML-like tags for clear section boundaries.
     /// </summary>
-    private static string BuildSystemPrompt(DocContextDto context, bool hasCodeAccess)
+    private static string BuildSystemPrompt(DocContextDto context, bool hasCodeAccess, string? preloadedChangesReport = null)
     {
         var responseLanguage = WikiLanguageNames.GetEnglishName(context.UserLanguage);
 
@@ -983,11 +1081,14 @@ public class ChatAssistantService : IChatAssistantService
         sb.AppendLine("- ReadDoc: Read documentation content from the wiki catalog");
         sb.AppendLine("  IMPORTANT: ReadDoc returns a 'sourceFiles' field containing the list of source code files");
         sb.AppendLine("  that were used to generate this document. Use these paths with ReadFile for deeper analysis.");
+        sb.AppendLine("- GetWikiChanges: Query newly added or updated Wiki chapters and incremental sync tasks by Beijing date range");
         if (hasCodeAccess)
         {
             sb.AppendLine("- ReadFile: Read source code files with line numbers");
             sb.AppendLine("- ListFiles: Discover project structure and files");
             sb.AppendLine("- Grep: Search for patterns across the codebase");
+            sb.AppendLine("- GetGitChanges: Query daily Git commits and added/modified/deleted files across repositories by Beijing date range");
+            sb.AppendLine("- GetGitCommitDiff: Read concrete + / - code diffs for a commit SHA or date to understand exact business logic changes");
         }
         sb.AppendLine();
         sb.AppendLine("Use these tools proactively to gather context before answering.");
@@ -1024,6 +1125,7 @@ public class ChatAssistantService : IChatAssistantService
 
         // Context Section
         sb.AppendLine("<context>");
+        sb.AppendLine($"Current Time: {WikiChangeReportTool.FormatCurrentBeijingTimeBanner()}");
         sb.AppendLine($"Repository: {context.Owner}/{context.Repo}");
         sb.AppendLine($"Branch: {context.Branch}");
         sb.AppendLine($"Document Language: {context.Language}");
@@ -1033,6 +1135,14 @@ public class ChatAssistantService : IChatAssistantService
         }
         sb.AppendLine("</context>");
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(preloadedChangesReport))
+        {
+            sb.AppendLine("<daily_changes_report>");
+            sb.AppendLine(preloadedChangesReport);
+            sb.AppendLine("</daily_changes_report>");
+            sb.AppendLine();
+        }
 
         // Workflow Section
         sb.AppendLine("<workflow>");
@@ -1044,6 +1154,11 @@ public class ChatAssistantService : IChatAssistantService
         sb.AppendLine("- Note any ambiguities that need clarification");
         sb.AppendLine();
         sb.AppendLine("PHASE 2: GATHER (MANDATORY for technical questions)");
+        sb.AppendLine("- When the user asks what content/features/code were added, modified, or updated today, yesterday, daily, this week, or on any date:");
+        sb.AppendLine("  * If <daily_changes_report> is ALREADY provided above and covers the user's requested time window, DO NOT re-call GetGitChanges/GetWikiChanges or loop through every commit diff — synthesize the complete report directly from <daily_changes_report> (at most 1 targeted GetGitCommitDiff call only if a critical commit diff was truncated).");
+        sb.AppendLine("  * Only if <daily_changes_report> is absent or the user asks for another historical date range, call GetGitChanges + GetWikiChanges once, and pass a YYYY-MM-DD date string to GetGitCommitDiff in at most 1 round so you never exceed tool call limits.");
+        sb.AppendLine("  * Translate technical commits/diffs into clear business-level summaries of 【新增内容】 (Added) and 【修改内容】 (Modified) plus 【Wiki 文档更新】 grouped by Beijing date, and NEVER output intermediate narration like '让我先调用工具...' before your final answer.");
+        sb.AppendLine("  * If the queried date has 0 new commits so far, clearly state that no changes were submitted in that window yet and summarize the most recent historical changes returned in the report.");
         sb.AppendLine("- Use ReadDoc to fetch relevant documentation content");
         sb.AppendLine("- ALWAYS check the 'sourceFiles' field in ReadDoc response");
         if (hasCodeAccess)

@@ -1124,9 +1124,6 @@ public static class OpenPlatformEndpoints
         var targetRepoIds = targetGroupRepos.Select(r => r.Id).ToArray();
         var hasScopeFilter = targetRepoIds.Length > 0;
 
-        var escapedQuery = queryText.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-        var pattern = $"%{escapedQuery}%";
-
         var baseQuery =
             from r in context.Repositories.AsNoTracking().Where(x => !x.IsDeleted)
             join b in context.RepositoryBranches.AsNoTracking().Where(x => !x.IsDeleted)
@@ -1150,22 +1147,45 @@ public static class OpenPlatformEndpoints
                 c.Title,
                 c.Path,
                 c.Order,
-                d.Content
+                d.Content,
+                d.SourceFiles
             };
 
-        var matchedDocs = await baseQuery
-            .Where(x => EF.Functions.Like(x.Title, pattern) || EF.Functions.Like(x.Content, pattern))
-            .Take(maxSources)
+        var searchTerms = ZtWorkEndpoints.ExtractSearchTerms(queryText);
+        var candidateDocs = await baseQuery
+            .OrderBy(x => x.Order)
+            .Take(hasScopeFilter ? 200 : 120)
             .ToListAsync(cancellationToken);
 
-        // Fallback: if keyword didn't directly match via LIKE, load top overview docs from each target repository in the group
-        if (matchedDocs.Count == 0 && hasScopeFilter)
-        {
-            matchedDocs = await baseQuery
-                .OrderBy(x => x.Order)
-                .Take(Math.Min(Math.Max(3, targetRepoIds.Length * 2), maxSources))
-                .ToListAsync(cancellationToken);
-        }
+        var matchedDocs = candidateDocs
+            .Select(doc =>
+            {
+                var score = 0.0;
+                foreach (var term in searchTerms)
+                {
+                    var w = term.Length >= 3 ? 2.0 : 1.0;
+                    if (doc.Title.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                        doc.Path.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += w * 2.5;
+                    }
+                    if (!string.IsNullOrEmpty(doc.SourceFiles) &&
+                        doc.SourceFiles.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += w * 2.0;
+                    }
+                    if (doc.Content.Contains(term, StringComparison.OrdinalIgnoreCase))
+                    {
+                        score += w * 1.0;
+                    }
+                }
+                return (Doc: doc, Score: score);
+            })
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Doc.Order)
+            .Take(maxSources)
+            .Select(x => x.Doc)
+            .ToList();
 
         var citations = matchedDocs.Select(doc =>
         {
@@ -1227,21 +1247,44 @@ public static class OpenPlatformEndpoints
             var requestOptions = resolvedModel.ToRequestOptions();
 
             var tools = new List<AITool>();
-            if (targetRepo != null)
+            GitTool? gitTool = null;
+            var scopeFactory = httpContext.RequestServices.GetService<IServiceScopeFactory>();
+            if (targetGroupRepos.Count > 0)
             {
-                var branchName = request.Branch ?? matchedDocs.FirstOrDefault()?.BranchName ?? "main";
-                var repoPath = RepositoryWorkspacePath.Resolve(repoOptions.Value, targetRepo.OrgName, targetRepo.RepoName, branchName);
-                if (Directory.Exists(repoPath))
+                if (scopeFactory != null)
                 {
-                    try
+                    tools.Add(WikiChangeReportTool.CreateTool(scopeFactory, targetGroupRepos.Select(r => r.Id).ToArray()));
+                }
+
+                try
+                {
+                    var repoWorkspaces = new List<GitWorkspaceConfig>();
+                    foreach (var repo in targetGroupRepos)
                     {
-                        var gitTool = new GitTool(repoPath);
-                        tools.AddRange(gitTool.GetTools());
+                        var branchName = request.Branch
+                            ?? matchedDocs.FirstOrDefault(d => d.RepositoryId == repo.Id)?.BranchName
+                            ?? "main";
+                        var repoPath = RepositoryWorkspacePath.Resolve(repoOptions.Value, repo.OrgName, repo.RepoName, branchName);
+                        if (Directory.Exists(repoPath))
+                        {
+                            repoWorkspaces.Add(new GitWorkspaceConfig(
+                                repo.RepoName,
+                                repoPath,
+                                branchName,
+                                repo.AuthAccount,
+                                repo.AuthPassword));
+                        }
                     }
-                    catch
+
+                    if (repoWorkspaces.Count > 0)
                     {
-                        // Ignore GitTool initialization errors
+                        gitTool = new GitTool(repoWorkspaces);
+                        tools.AddRange(gitTool.GetTools(includeChangeHistory: true));
                     }
+                }
+                catch
+                {
+                    // Ignore GitTool initialization errors
                 }
             }
 
@@ -1269,6 +1312,7 @@ public static class OpenPlatformEndpoints
                 requestOptions);
 
             var promptBuilder = new StringBuilder();
+            promptBuilder.AppendLine($"Current Time: {WikiChangeReportTool.FormatCurrentBeijingTimeBanner()}");
             if (targetGroupRepos.Count > 1)
             {
                 promptBuilder.AppendLine($"Target System Group: {request.Group ?? targetGroupRepos[0].OrgName}");
@@ -1284,6 +1328,30 @@ public static class OpenPlatformEndpoints
             }
             promptBuilder.AppendLine($"Question: {queryText}");
             promptBuilder.AppendLine();
+
+            if (WikiChangeReportTool.IsChangeHistoryQuestion(queryText) && targetGroupRepos.Count > 0)
+            {
+                var (sinceBj, untilBj, rangeLabel) = WikiChangeReportTool.ParseBeijingDateWindow(null, null, queryText);
+                var wikiChanges = await WikiChangeReportTool.QueryWikiChangesAsync(
+                    context,
+                    targetGroupRepos.Select(r => r.Id).ToArray(),
+                    sinceBj,
+                    untilBj,
+                    rangeLabel,
+                    cancellationToken);
+                var gitChanges = gitTool != null
+                    ? await gitTool.BuildPreloadedGitChangeSummaryAsync(queryText, 8500, cancellationToken)
+                    : string.Empty;
+
+                promptBuilder.AppendLine("=== DAILY CHANGES REPORT ===");
+                if (!string.IsNullOrWhiteSpace(gitChanges))
+                {
+                    promptBuilder.AppendLine(gitChanges);
+                    promptBuilder.AppendLine();
+                }
+                promptBuilder.AppendLine(wikiChanges);
+                promptBuilder.AppendLine();
+            }
             promptBuilder.AppendLine("=== KNOWLEDGE BASE CONTEXT ===");
             foreach (var doc in matchedDocs)
             {

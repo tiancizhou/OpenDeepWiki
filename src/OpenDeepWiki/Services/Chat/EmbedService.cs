@@ -338,8 +338,24 @@ public class EmbedService : IEmbedService
         GitTool? gitTool = null;
         var tools = new List<AITool>();
 
+        string? preloadedChangesReport = null;
+        var lastUserQuestion = request.Messages.LastOrDefault(m => m.Role.Equals("user", StringComparison.OrdinalIgnoreCase))?.Content;
+
         if (!string.IsNullOrWhiteSpace(request.Owner) && !string.IsNullOrWhiteSpace(request.Repo))
         {
+            var groupRepos = await _context.Repositories
+                .AsNoTracking()
+                .Where(r => !r.IsDeleted && r.OrgName == request.Owner)
+                .ToListAsync(cancellationToken);
+
+            var currentRepoEntity = groupRepos.FirstOrDefault(r =>
+                string.Equals(r.RepoName, request.Repo, StringComparison.OrdinalIgnoreCase));
+
+            if (groupRepos.Count > 0)
+            {
+                tools.Add(WikiChangeReportTool.CreateTool(_contextFactory, groupRepos.Select(r => r.Id).ToArray()));
+            }
+
             var repositoryPath = GetRepositoryPath(request.Owner, request.Repo, request.Branch);
             if (Directory.Exists(repositoryPath))
             {
@@ -350,9 +366,16 @@ public class EmbedService : IEmbedService
                     {
                         CheckoutBranch(repositoryPath, request.Branch);
                     }
-                    
-                    gitTool = new GitTool(repositoryPath);
-                    tools.AddRange(gitTool.GetTools());
+
+                    gitTool = new GitTool([
+                        new GitWorkspaceConfig(
+                            request.Repo,
+                            repositoryPath,
+                            request.Branch,
+                            currentRepoEntity?.AuthAccount,
+                            currentRepoEntity?.AuthPassword)
+                    ]);
+                    tools.AddRange(gitTool.GetTools(includeChangeHistory: true));
                     _logger.LogInformation("GitTool initialized for app {AppId} with repository {Owner}/{Repo}@{Branch}",
                         request.AppId, request.Owner, request.Repo, request.Branch);
                 }
@@ -365,6 +388,43 @@ public class EmbedService : IEmbedService
             {
                 _logger.LogWarning("Repository path does not exist: {RepoPath}", repositoryPath);
             }
+
+            if (!string.IsNullOrWhiteSpace(lastUserQuestion) && WikiChangeReportTool.IsChangeHistoryQuestion(lastUserQuestion))
+            {
+                var reportSb = new StringBuilder();
+                if (gitTool != null)
+                {
+                    var gitSummary = await gitTool.BuildPreloadedGitChangeSummaryAsync(
+                        lastUserQuestion,
+                        maxDiffChars: 12000,
+                        cancellationToken: cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(gitSummary))
+                    {
+                        reportSb.AppendLine(gitSummary);
+                    }
+                }
+
+                if (groupRepos.Count > 0)
+                {
+                    var (sinceBj, untilBj, rangeLabel) = WikiChangeReportTool.ParseBeijingDateWindow(null, null, lastUserQuestion);
+                    var wikiSummary = await WikiChangeReportTool.QueryWikiChangesAsync(
+                        _context,
+                        groupRepos.Select(r => r.Id).ToArray(),
+                        sinceBj,
+                        untilBj,
+                        rangeLabel,
+                        cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(wikiSummary))
+                    {
+                        reportSb.AppendLine(wikiSummary);
+                    }
+                }
+
+                if (reportSb.Length > 0)
+                {
+                    preloadedChangesReport = reportSb.ToString().Trim();
+                }
+            }
         }
 
         // Build enhanced system prompt with repository context
@@ -373,7 +433,8 @@ public class EmbedService : IEmbedService
             app.Description,
             request.Owner,
             request.Repo,
-            gitTool != null);
+            gitTool != null,
+            preloadedChangesReport);
 
         // Create agent with app's AI configuration
         var agentOptions = new ChatClientAgentOptions
@@ -664,7 +725,8 @@ public class EmbedService : IEmbedService
         string? appDescription,
         string? owner,
         string? repo,
-        bool hasCodeAccess)
+        bool hasCodeAccess,
+        string? preloadedChangesReport = null)
     {
         var sb = new StringBuilder();
 
@@ -681,15 +743,19 @@ public class EmbedService : IEmbedService
 
         // Capabilities Section
         sb.AppendLine("<capabilities>");
+        sb.AppendLine($"Current Time: {WikiChangeReportTool.FormatCurrentBeijingTimeBanner()}");
         if (hasCodeAccess)
         {
-            sb.AppendLine("You have access to the following tools for code analysis:");
+            sb.AppendLine("You have access to the following tools for code and change history analysis:");
             sb.AppendLine("- ReadFile: Read source code files with line numbers");
             sb.AppendLine("- ListFiles: Discover project structure and files");
             sb.AppendLine("- Grep: Search for patterns across the codebase");
+            sb.AppendLine("- GetGitChanges: Query daily Git commits and added/modified files by Beijing date range");
+            sb.AppendLine("- GetGitCommitDiff: Inspect + / - code diffs for commits or dates to summarize business-level changes");
+            sb.AppendLine("- GetWikiChanges: Query newly added or updated Wiki chapters by Beijing date range");
             sb.AppendLine();
             sb.AppendLine("Use these tools proactively to gather context before answering.");
-            sb.AppendLine("NEVER guess about code - always verify with actual source files.");
+            sb.AppendLine("NEVER guess about code or daily updates - always verify with actual tools.");
         }
         else
         {
@@ -808,6 +874,15 @@ public class EmbedService : IEmbedService
         }
         sb.AppendLine("</context>");
         sb.AppendLine();
+
+        if (!string.IsNullOrWhiteSpace(preloadedChangesReport))
+        {
+            sb.AppendLine("<daily_changes_report>");
+            sb.AppendLine(preloadedChangesReport);
+            sb.AppendLine("</daily_changes_report>");
+            sb.AppendLine("When <daily_changes_report> is provided above and covers the user's requested date range, synthesize your answer directly from it (separating 【新增内容】, 【修改内容】, and 【Wiki 文档更新】 grouped by Beijing date) without repeating redundant tool calls.");
+            sb.AppendLine();
+        }
 
         sb.AppendLine("</system>");
 

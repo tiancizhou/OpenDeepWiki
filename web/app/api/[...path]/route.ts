@@ -117,8 +117,8 @@ async function proxyRequest(request: NextRequest) {
     // 构建转发请求的 headers
     const headers = new Headers();
     request.headers.forEach((value, key) => {
-      // 跳过 host 相关的 header
-      if (!['host', 'connection'].includes(key.toLowerCase())) {
+      // 跳过 host / connection / expect 相关的 hop-by-hop header（避免 undici 因 Expect: 100-continue 抛错导致 502）
+      if (!['host', 'connection', 'expect'].includes(key.toLowerCase())) {
         headers.set(key, value);
       }
     });
